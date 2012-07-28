@@ -1,18 +1,23 @@
-#include "objects/HttpResponse.h"
+#include "utilities/ByteStream.h"
 
-namespace c11http {
-   namespace objects {
+namespace quicktcp {
+namespace utilities {
 
-      HttpResponse::HttpResponse(const std::string& body) : mBody(body) {
+ByteStream::ByteStream(const std::vector<char>& data) : mData(data)
+{
 
-      }
-      HttpResponse::~HttpResponse() {
+}
 
-      }
+ByteStream::ByteStream(const char* buffer, const size_t size)
+{
+	mData.reserve(size);
+	for(size_t i = 0; i < size; ++i) mData.push_back(buffer[i]);
+}
 
-      const std::string& HttpResponse::getBody() const {
-         return mBody;
-      }
+ByteStream::~ByteStream()
+{
 
-   }
+}
+
+}
 }

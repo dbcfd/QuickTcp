@@ -1,19 +1,40 @@
 #pragma once
 
-#include "objects/Platform.h"
+#include "utilities/Platform.h"
 
-namespace c11http {
-namespace objects {
+#include <vector>
 
-class OBJECTS_API HttpResponse {
+namespace quicktcp {
+namespace utilities {
+
+class UTILITIES_API ByteStream {
 public:
-   HttpResponse(const std::string& body = "");
-   ~HttpResponse();
+	ByteStream(const std::vector<char>& data);
+	ByteStream(const char* data, const size_t size);
+	~ByteStream();
 
-   const std::string& getBody() const;
+	inline const std::vector<char>& getData() const;
+	inline const char* getBuffer() const;
+	inline const size_t getSize() const;
 private:
-   std::string mBody;
+	std::vector<char> mData;
 };
+
+//Inline methods
+const std::vector<char>& ByteStream::getData() const
+{
+	return mData;
+}
+
+const char* ByteStream::getBuffer() const
+{
+	return &(mData[0]);
+}
+
+const size_t ByteStream::getSize() const
+{
+	return mData.size();
+}
 
 }
 }

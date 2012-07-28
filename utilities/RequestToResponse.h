@@ -1,16 +1,15 @@
 #pragma once
 
-#include "objects/Platform.h"
+#include "utilities/Platform.h"
 
 #include <functional>
 
-namespace c11http {
-namespace objects {
+namespace quicktcp {
+namespace utilities {
 
-class OBJECTS_API HttpRequest;
-class OBJECTS_API HttpResponse;
+class UTILITIES_API ByteStream;
 
-typedef std::function<c11http::objects::HttpResponse(c11http::objects::HttpRequest)> HttpRequestToResponse;
+typedef std::function<ByteStream(const ByteStream&)> RequestToResponse;
 
 }
 }
