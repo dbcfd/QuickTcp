@@ -41,7 +41,7 @@ protected:
 		readT<size_t>(len);
 		if(0 != len)
 		{
-			str.reserve(len);
+			str.resize(len, 0);
 			readT<char>(str[0], sizeof(char), len);
 		}
 	}

@@ -9,9 +9,13 @@ namespace utilities {
 
 class UTILITIES_API ByteStream {
 public:
+	ByteStream();
+	ByteStream(const ByteStream& other);
 	ByteStream(const std::vector<char>& data);
 	ByteStream(const char* data, const size_t size);
 	~ByteStream();
+
+	ByteStream& operator=(const ByteStream& other);
 
 	inline const std::vector<char>& getData() const;
 	inline const char* getBuffer() const;

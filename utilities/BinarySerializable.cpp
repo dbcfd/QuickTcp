@@ -46,7 +46,13 @@ void BinarySerializable::fromBinaryStream(FILE* binaryStream)
 		mSize = 0;
 	}
 	mFile = binaryStream;
-	if(nullptr != mFile) mSize = ftell(mFile);
+	if(nullptr != mFile) 
+	{
+		fseek(mFile, 0, SEEK_END);
+		mSize = ftell(mFile);
+		rewind(mFile);
+		readFromStream();
+	}
 }
 
 void BinarySerializable::fillStream()
@@ -71,14 +77,19 @@ void BinarySerializable::fillStream()
 ByteStream BinarySerializable::toByteStream()
 {
 	fillStream();
-	std::vector<char> vec(mSize, 0);
-	try
+	std::vector<char> vec;
+	if(nullptr != mFile)
 	{
-		writeT<char>(&(vec[0]), mSize);
-	}
-	catch(std::runtime_error)
-	{
-		//empty byte stream
+		rewind(mFile);
+		vec.resize(mSize, 0);
+		try
+		{
+			readT<char>(&(vec[0]), mSize);
+		}
+		catch(std::runtime_error)
+		{
+			//empty byte stream
+		}
 	}
 	return ByteStream(vec);
 }
