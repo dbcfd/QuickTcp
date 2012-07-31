@@ -1,36 +1,48 @@
 #include "workers/Worker.h"
+#include "workers/Task.h"
 
-#include "objects/HttpRequest.h"
-#include "objects/HttpResponse.h"
-
-namespace c11http {
+namespace quicktcp {
 namespace workers {
 
-Worker::Worker() {
-
+Worker::Worker() 
+{
+    mThread = new std::thread(std::bind(&Worker::threadEntryPoint, this));
 }
 
-Worker::~Worker() {
-   auto reqToResp = [this](objects::HttpRequest) -> objects::HttpResponse {
-      mShutdown = true;
-      return objects::HttpResponse();
-   };
-   Work work = std::tuple<objects::HttpRequest, objects::HttpRequestToResponse>(objects::HttpRequest(), reqToResp);
-   mPromiseToWork.set_value(work);
+Worker::~Worker() 
+{
+    if(!mShutdown)
+    {
+        shutdown();
+    }
+    mThread->join();
+    delete mThread;
 }
 
-void Worker::threadEntryPoint() {
-   while(!mShutdown) {
-      std::future<Work> futureWork = mPromiseToWork.get_future();
-      futureWork.wait();
-      Work work = futureWork.get();
-      objects::HttpRequestToResponse reqToResp = std::get<1>(work);
-      reqToResp(std::get<0>(work));
-   }
+void Worker::threadEntryPoint() 
+{
+    while(!mShutdown) {
+        std::future<std::pair<Task*,WorkCompleteFunction>> futureWork = mPromiseToWork.get_future();
+        futureWork.wait();
+        std::pair<Task*,WorkCompleteFunction> work = futureWork.get();
+        if(nullptr != work.first)
+        {
+            work.first->perform();
+            (work.second)(this);
+        }
+        mPromiseToWork = std::promise<std::pair<Task*,WorkCompleteFunction>>();
+    }
 }
 
-void Worker::provideWork(const Worker::Work& work) {
-   mPromiseToWork.set_value(work);
+void Worker::provideWork(Task* work, WorkCompleteFunction workDone)
+{
+    mPromiseToWork.set_value(std::make_pair(work, workDone));
+}
+
+void Worker::shutdown()
+{
+    mShutdown = true;
+    provideWork(nullptr, [this](Worker*) -> void {});
 }
 
 }

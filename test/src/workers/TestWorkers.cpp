@@ -1,114 +1,114 @@
-#include "profiler/Profiler.h"
+#include "workers/Task.h"
+#include "workers/Worker.h"
+#include "workers/WorkerPool.h"
 
-#pragma warning(disable:4251)
+#include <chrono>
+
+#pragma warning(disable:4251 4275)
 #include <gtest/gtest.h>
 
-double testValues[] = {
-#include "TestValues.h"
+using namespace quicktcp::workers;
+
+class LongRunningTask : public Task
+{
+public:
+    LongRunningTask(const unsigned int extraTime = 0) : mExtraTime(extraTime)
+    {
+
+    }
+
+    virtual void performTask()
+    {
+        std::this_thread::sleep_for(std::chrono::seconds(5 + mExtraTime));
+    }
+private:
+    unsigned int mExtraTime;
 };
 
-void multiplyFunction(int maxValueToProcess)
+class ShortRunningTask : public Task
 {
-    PROFILE_SCOPED();
-    double lastValue = 1.0;
-    for(int i = 0; i < 1000; ++i)
-    {
-        double value = testValues[i] * lastValue;
-        lastValue = testValues[i];
-    }
-}
-
-void divideFunction(int maxValueToProcess)
-{
-    PROFILE_SCOPED();
-    double lastValue = 1.0;
-    for(int i = 0; i < 1000; ++i)
-    {
-        double value = testValues[i] / lastValue;
-        lastValue = testValues[i];
-    }
-}
-
-TEST(PROFILER_TEST, NO_THREADING_TEST)
-{
-    {
-        PROFILE_SCOPED();
-
-        multiplyFunction(1000);
-        divideFunction(1000);
-
-        multiplyFunction(500);
-        divideFunction(500);
-    }
-
-    std::string output = PROFILER_DUMPSTRING();
-
-    EXPECT_TRUE(output.size() > 0);
-}
-
-#ifdef WIN32
-
-#include <vector>
-#include <windows.h>
-
-typedef void (*ComputeFunctionMethod)(int);
-
-struct ComputeFunction {
-    ComputeFunction()
+public:
+    ShortRunningTask()
     {
 
     }
-    ComputeFunction(ComputeFunctionMethod _method, const std::vector<int>& args) : method(_method), arguments(args)
-    {
 
+    virtual void performTask()
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
-    ComputeFunctionMethod method;
-    std::vector<int> arguments;
 };
+    
+TEST(WORKERS_TEST, CONSTRUCTOR_DESTRUCTOR)
+{	
+    ASSERT_NO_THROW(LongRunningTask());
+    ASSERT_NO_THROW(ShortRunningTask());
+    ASSERT_NO_THROW(Worker());
+    ASSERT_NO_THROW(WorkerPool(2));
+}
 
-DWORD WINAPI RunFunctionInThread(LPVOID params)
+TEST(WORKERS_TEST, TASK_METHODS)
 {
-    PROFILE_SCOPED();
-    ComputeFunction* func = (ComputeFunction*)params;
-    for(std::vector<int>::const_iterator iter = func->arguments.begin();
-        iter != func->arguments.end();
-        ++iter)
+    ShortRunningTask task;
+    EXPECT_FALSE(task.completedSuccessfully());
+    task.perform();
+    EXPECT_TRUE(task.completedSuccessfully());
+    task.reset();
+    EXPECT_FALSE(task.completedSuccessfully());
+}
+
+TEST(WORKERS_TEST, WORKER_METHODS)
+{
     {
-        (*func->method)(*iter);
+        Worker worker;
+        LongRunningTask task;
+        EXPECT_FALSE(task.completedSuccessfully());
+        worker.provideWork(&task, [](Worker*) -> void {} );
+        EXPECT_FALSE(task.completedSuccessfully());
+        task.waitForCompletion();
+        EXPECT_TRUE(task.completedSuccessfully());
+        worker.shutdown();
+        task.reset();
+        worker.provideWork(&task, [](Worker*) -> void {} );
+        EXPECT_FALSE(task.completedSuccessfully());
+        std::this_thread::sleep_for(std::chrono::seconds(5));
+        EXPECT_FALSE(task.completedSuccessfully());
     }
-    return 0;
+
+    {
+        Worker worker;
+        ShortRunningTask task;
+        EXPECT_FALSE(task.completedSuccessfully());
+        worker.provideWork(&task, [](Worker*) -> void {} );
+        task.waitForCompletion();
+        EXPECT_TRUE(task.completedSuccessfully());
+        task.reset();
+        worker.provideWork(&task, [](Worker*) -> void {} );
+        worker.shutdown();
+        task.waitForCompletion();
+        EXPECT_TRUE(task.completedSuccessfully());
+    }
 }
 
-TEST(PROFILER_TEST, THREADING_TEST)
+TEST(WORKERS_TEST, WORKERPOOL_METHODS)
 {
-    PROFILE_SCOPED();
-    DWORD threadMultiplyId, threadDivideId;
-    HANDLE handles[2];
+    WorkerPool pool(2);
+    LongRunningTask lr1(2), lr2;
+    ShortRunningTask sr1, sr2;
 
-    std::vector<int> arguments;
-    arguments.push_back(1000);
-    arguments.push_back(500);
-    arguments.push_back(750);
-    arguments.push_back(900);
-    arguments.push_back(600);
-    ComputeFunction multiply(&multiplyFunction, arguments);
-    ComputeFunction divide(&divideFunction, arguments);
-
-    handles[0] = CreateThread(
-        NULL,
-        0,
-        RunFunctionInThread,
-        &multiply,
-        0,
-        &threadMultiplyId);
-    handles[1] = CreateThread(
-        NULL,
-        0,
-        RunFunctionInThread,
-        &divide,
-        0,
-        &threadDivideId);
-    WaitForMultipleObjects(2, handles, TRUE, INFINITE);
+    pool.addWork(nullptr);
+    pool.addWork(&lr1);
+    pool.addWork(&sr1);
+    pool.addWork(&lr2);
+    pool.addWork(&sr2);
+    sr1.waitForCompletion();
+    EXPECT_TRUE(sr1.completedSuccessfully());
+    EXPECT_FALSE(sr2.completedSuccessfully());
+    lr2.waitForCompletion();
+    EXPECT_TRUE(lr2.completedSuccessfully());
+    EXPECT_FALSE(sr2.completedSuccessfully());
+    sr2.waitForCompletion();
+    EXPECT_TRUE(sr2.completedSuccessfully());
+    EXPECT_FALSE(lr1.completedSuccessfully());
+    lr1.waitForCompletion();
 }
-
-#endif

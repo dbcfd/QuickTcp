@@ -2,28 +2,35 @@
 
 #include "workers/Platform.h"
 
-#include "objects/HttpRequestToResponse.h"
-
 #include <future>
-#include <atomic>
 
-namespace c11http {
+namespace quicktcp {
 namespace workers {
 
-class WORKERS_API Worker {
+class WORKERS_API Task {
 public :
-   typedef std::tuple<objects::HttpRequest, objects::HttpRequestToResponse> Work;
-   Worker();
-   ~Worker();
+   Task();
+   virtual ~Task();
 
-   void threadEntryPoint();
+   void perform();
+   
+   inline bool completedSuccessfully() const;
 
-   void provideWork(const Work& work);
-
+   void waitForCompletion() const;
+   void reset();
+protected:
+	virtual void performTask() = 0;
 private:
-   std::promise<Work> mPromiseToWork;
-   std::atomic<bool> mShutdown;
+	std::promise<bool> mTaskCompletePromise;
+    std::future<bool> mFutureTaskComplete;
+    bool mTaskCompletedSuccessfully;
 };
+
+//Inline methods
+bool Task::completedSuccessfully() const
+{
+    return mTaskCompletedSuccessfully;
+}
 
 }
 }
