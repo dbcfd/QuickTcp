@@ -8,7 +8,7 @@ Task::Task() : mTaskIsRunning(false), mPerformed(false), mTaskCompletePromise([]
             if(shouldRunTask) task->performTask();
             task->mTaskIsRunning = false;
             task->mSignal.notify_all();
-        } )
+        } ), mTaskIsComplete(false)
 {
     mTaskComplete = mTaskCompletePromise.get_future();
 }
@@ -37,6 +37,7 @@ void Task::perform()
     {
         mTaskCompletePromise(this, true);
     }
+    mTaskIsComplete = true;
 }
 
 void Task::waitForCompletion()

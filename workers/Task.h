@@ -22,6 +22,7 @@ public :
    void waitForCompletion();
 
    inline bool hasBeenPerformed() const;
+   inline bool isComplete() const;
 
 protected:
 	virtual void performTask() = 0;
@@ -32,6 +33,7 @@ private:
     std::condition_variable mSignal;
     std::mutex mSignalMutex;
     bool mTaskIsRunning;
+    bool mTaskIsComplete;
     std::atomic<bool> mPerformed;
 };
 
@@ -39,6 +41,11 @@ private:
 bool Task::hasBeenPerformed() const
 {
     return mPerformed;
+}
+
+bool Task::isComplete() const
+{
+    return mTaskIsComplete;
 }
 
 }
