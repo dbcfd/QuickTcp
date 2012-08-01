@@ -3,33 +3,52 @@
 namespace quicktcp {
 namespace workers {
 
-Task::Task() : mFutureTaskComplete(mTaskCompletePromise.get_future()), mTaskCompletedSuccessfully(false)
+Task::Task() : mTaskIsRunning(false), mPerformed(false), mTaskCompletePromise([](Task* task, bool shouldRunTask)->bool {
+            task->mTaskIsRunning = true;
+            bool ret = false;
+            if(shouldRunTask) ret = task->performTask();
+            task->mSignal.notify_all();
+            return ret;
+        } )
 {
 
 }
 
 Task::~Task()
 {
-
+    bool performed = mPerformed.exchange(true);
+    if(!performed)
+    {
+        mTaskCompletePromise(this, false);
+        
+    }
+    {
+        std::unique_lock<std::mutex> lock(mSignalMutex);
+        while(mTaskIsRunning)
+        {
+            mSignal.wait(lock);
+        }
+    }
 }
 
-void Task::perform()
+bool Task::perform()
 {
-    performTask();
-    mTaskCompletedSuccessfully = true;
-    mTaskCompletePromise.set_value(true);
+    bool performed = mPerformed.exchange(true);
+    bool ret = false;
+    if(!performed)
+    {
+        std::future<bool> taskResult = mTaskCompletePromise.get_future();
+        mTaskCompletePromise(this, true);
+        ret = taskResult.get();
+    }
+    return ret;
 }
 
-void Task::waitForCompletion() const
+bool Task::waitForCompletion()
 {
-    mFutureTaskComplete.wait();
-}
-
-void Task::reset()
-{
-    mTaskCompletePromise.set_value(false);
-    mTaskCompletePromise = std::promise<bool>();
-    mFutureTaskComplete = mTaskCompletePromise.get_future();
+    std::future<bool> future = mTaskCompletePromise.get_future();
+    future.wait();
+    return future.get();
 }
 
 }

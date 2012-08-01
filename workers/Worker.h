@@ -2,9 +2,11 @@
 
 #include "workers/Platform.h"
 
-#include <future>
 #include <atomic>
+#include <condition_variable>
+#include <future>
 #include <functional>
+#include <mutex>
 
 namespace quicktcp {
 namespace workers {
@@ -21,11 +23,17 @@ public :
     void shutdown();
 
 private:
+    std::packaged_task<bool(Task*,WorkCompleteFunction)> getWorkPromise();
     void threadEntryPoint();
 
-    std::promise< std::pair<Task*, WorkCompleteFunction> > mPromiseToWork;
-    std::atomic<bool> mShutdown;
+    std::packaged_task<bool(Task*,WorkCompleteFunction)> mWorkPromise;
+    std::atomic<bool> mRunning;
+    std::atomic<bool> mWorkReady;
+    std::condition_variable mWorkSignal;
+    std::mutex mWorkMutex;
     std::thread* mThread;
+    Task* mTask;
+    WorkCompleteFunction mWorkDone;
 };
 
 }

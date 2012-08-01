@@ -4,14 +4,32 @@
 namespace quicktcp {
 namespace workers {
 
-Worker::Worker() 
+Worker::Worker() : mRunning(false), mWorkReady(false), mWorkPromise(getWorkPromise())
 {
+    std::unique_lock<std::mutex> lock(mWorkMutex);
     mThread = new std::thread(std::bind(&Worker::threadEntryPoint, this));
+    while(!mRunning)
+    {
+        mWorkSignal.wait(lock);
+    }
+}
+
+std::packaged_task<bool(Task*, Worker::WorkCompleteFunction)> Worker::getWorkPromise()
+{
+    return std::packaged_task<bool(Task*,WorkCompleteFunction)>([this](Task* task, WorkCompleteFunction func) -> bool {
+        std::future<bool> workDone = mWorkPromise.get_future();
+        workDone.wait();
+        bool ret = false;
+        if(nullptr != task) ret = task->perform();
+        mWorkPromise.swap(getWorkPromise());
+        func(this);
+        return ret;
+    } );
 }
 
 Worker::~Worker() 
 {
-    if(!mShutdown)
+    if(mRunning)
     {
         shutdown();
     }
@@ -21,28 +39,34 @@ Worker::~Worker()
 
 void Worker::threadEntryPoint() 
 {
-    while(!mShutdown) {
-        std::future<std::pair<Task*,WorkCompleteFunction>> futureWork = mPromiseToWork.get_future();
-        futureWork.wait();
-        std::pair<Task*,WorkCompleteFunction> work = futureWork.get();
-        if(nullptr != work.first)
+    mRunning = true;
+    mWorkSignal.notify_all();
+    while(mRunning)
+    {
+        std::unique_lock<std::mutex> lock(mWorkMutex);
+        while(!mWorkReady) 
         {
-            work.first->perform();
-            (work.second)(this);
+            mWorkSignal.wait(lock);
         }
-        mPromiseToWork = std::promise<std::pair<Task*,WorkCompleteFunction>>();
+        if(mRunning) mWorkPromise(mTask, mWorkDone);
     }
 }
 
 void Worker::provideWork(Task* work, WorkCompleteFunction workDone)
 {
-    mPromiseToWork.set_value(std::make_pair(work, workDone));
+    if(mRunning)
+    {
+        mTask = work;
+        mWorkDone = workDone;
+        mWorkReady = true;
+        mWorkSignal.notify_all();
+    }
 }
 
 void Worker::shutdown()
 {
-    mShutdown = true;
-    provideWork(nullptr, [this](Worker*) -> void {});
+    mRunning = false;
+    mWorkPromise(nullptr, [](Worker*) -> void {} );
 }
 
 }

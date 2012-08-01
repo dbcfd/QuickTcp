@@ -2,7 +2,9 @@
 
 #include "workers/Platform.h"
 
+#include <atomic>
 #include <future>
+#include <condition_variable>
 
 namespace quicktcp {
 namespace workers {
@@ -12,25 +14,23 @@ public :
    Task();
    virtual ~Task();
 
-   void perform();
-   
-   inline bool completedSuccessfully() const;
+   /**
+    * Starts the task operation.
+    */
+   bool perform();
 
-   void waitForCompletion() const;
-   void reset();
+   bool waitForCompletion();
+
 protected:
-	virtual void performTask() = 0;
+	virtual bool performTask() = 0;
+    void notifyTaskComplete();
 private:
-	std::promise<bool> mTaskCompletePromise;
-    std::future<bool> mFutureTaskComplete;
-    bool mTaskCompletedSuccessfully;
+	std::packaged_task<bool(Task*,bool)> mTaskCompletePromise;
+    std::condition_variable mSignal;
+    std::mutex mSignalMutex;
+    bool mTaskIsRunning;
+    std::atomic<bool> mPerformed;
 };
-
-//Inline methods
-bool Task::completedSuccessfully() const
-{
-    return mTaskCompletedSuccessfully;
-}
 
 }
 }

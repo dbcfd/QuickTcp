@@ -16,24 +16,22 @@ class WORKERS_API Task;
 
 class WORKERS_API WorkerPool {
 public:
-    WorkerPool(const size_t nbWorkers);
+    WorkerPool(const size_t nbWorkers, const bool runInOwnThread = true);
     ~WorkerPool();
 
     void addWork(Task* workToBeDone);
     void shutdown();
 protected:
     void threadEntryPoint();
+    void runNextTask(Worker* worker);
 private:
-    std::packaged_task<bool()> generateWorkerReady();
-    std::packaged_task<bool()> generateTaskReady();
-    std::queue<Worker*> mWorkers;
+    std::vector<Worker*> mWorkers;
     std::queue<Task*> mWaitingTasks;
-    std::packaged_task<bool()>* mTaskReady;
-    std::packaged_task<bool()>* mWorkerReady;
-    std::mutex mProcessingMutex;
-    bool mShutdown;
+    std::mutex mMutex;
+    std::condition_variable mSignal;
+    std::atomic<bool> mRunning;
     std::thread* mThread;
-    std::atomic<int> mWorkersRunning;
+    size_t mNextWorkerToUse;
 };
 
 }
