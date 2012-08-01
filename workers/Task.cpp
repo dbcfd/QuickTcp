@@ -3,15 +3,14 @@
 namespace quicktcp {
 namespace workers {
 
-Task::Task() : mTaskIsRunning(false), mPerformed(false), mTaskCompletePromise([](Task* task, bool shouldRunTask)->bool {
+Task::Task() : mTaskIsRunning(false), mPerformed(false), mTaskCompletePromise([](Task* task, bool shouldRunTask)->void {
             task->mTaskIsRunning = true;
-            bool ret = false;
-            if(shouldRunTask) ret = task->performTask();
+            if(shouldRunTask) task->performTask();
+            task->mTaskIsRunning = false;
             task->mSignal.notify_all();
-            return ret;
         } )
 {
-
+    mTaskComplete = mTaskCompletePromise.get_future();
 }
 
 Task::~Task()
@@ -31,24 +30,18 @@ Task::~Task()
     }
 }
 
-bool Task::perform()
+void Task::perform()
 {
     bool performed = mPerformed.exchange(true);
-    bool ret = false;
     if(!performed)
     {
-        std::future<bool> taskResult = mTaskCompletePromise.get_future();
         mTaskCompletePromise(this, true);
-        ret = taskResult.get();
     }
-    return ret;
 }
 
-bool Task::waitForCompletion()
+void Task::waitForCompletion()
 {
-    std::future<bool> future = mTaskCompletePromise.get_future();
-    future.wait();
-    return future.get();
+    mTaskComplete.wait();
 }
 
 }

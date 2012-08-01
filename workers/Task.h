@@ -17,20 +17,29 @@ public :
    /**
     * Starts the task operation.
     */
-   bool perform();
+   void perform();
 
-   bool waitForCompletion();
+   void waitForCompletion();
+
+   inline bool hasBeenPerformed() const;
 
 protected:
-	virtual bool performTask() = 0;
+	virtual void performTask() = 0;
     void notifyTaskComplete();
 private:
-	std::packaged_task<bool(Task*,bool)> mTaskCompletePromise;
+	std::packaged_task<void(Task*,bool)> mTaskCompletePromise;
+    std::future<void> mTaskComplete;
     std::condition_variable mSignal;
     std::mutex mSignalMutex;
     bool mTaskIsRunning;
     std::atomic<bool> mPerformed;
 };
+
+//inline
+bool Task::hasBeenPerformed() const
+{
+    return mPerformed;
+}
 
 }
 }

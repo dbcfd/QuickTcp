@@ -4,71 +4,71 @@
 namespace quicktcp {
 namespace workers {
 
-WorkerPool::WorkerPool(const size_t nbWorkers, const bool runInOwnThread) : mRunning(false)
+WorkerPool::WorkerPool(const size_t nbWorkers) : mShuttingDown(false)
 {
     if(nbWorkers <= 0) throw(std::runtime_error("Number of workers must be greater than 0"));
     mWorkers.reserve(nbWorkers);
+    Worker::GetTaskFunction gtFunc = std::bind(&WorkerPool::getNextTask, this, std::placeholders::_1);
+    Worker::WorkCompleteFunction wcFunc = [this](size_t workerIndex) -> void {
+        mWorkerCompleteSignal.notify_all();
+    };
     for(size_t i = 0; i < nbWorkers; ++i) {
-        mWorkers.push_back(new Worker());
-    }
-    mNextWorkerToUse = 0;
-    if(runInOwnThread)
-    {
-        mThread = new std::thread(std::bind(&WorkerPool::threadEntryPoint, this));
-        std::unique_lock<std::mutex> lock(mMutex);
-        while(!mRunning)
-        {
-            mSignal.wait(lock);
-        }
+        mWorkers.push_back(new Worker(gtFunc, wcFunc, i));
     }
 }
 
 WorkerPool::~WorkerPool() 
 {
-    shutdown();
+    if(!mShuttingDown)
+    {
+        shutdown();
+    }
     std::for_each(mWorkers.begin(), mWorkers.end(), [](Worker* worker) {
         delete worker;
     } );
 }
 
+void WorkerPool::shutdownWorker(Worker* worker)
+{
+    worker->shutdown();
+    mTaskSignal.notify_all();
+    std::unique_lock<std::mutex> lock(mWorkerCompleteMutex);
+    while(worker->isRunning())
+    {
+        mWorkerCompleteSignal.wait(lock);
+    }
+}
+
+
 void WorkerPool::shutdown()
 {
-    mRunning = false;
-    mSignal.notify_all();
+    mShuttingDown = true;
+    std::for_each(mWorkers.begin(), mWorkers.end(), [this](Worker* worker) {
+        shutdownWorker(worker);
+    } );
 }
 
-void WorkerPool::threadEntryPoint()
-{
-    while(mRunning)
+Task* WorkerPool::getNextTask(size_t index)
+{    
+    std::unique_lock<std::mutex> lock(mTaskMutex);
+    while(!mShuttingDown && mWaitingTasks.empty())
     {
-        Worker* worker = mWorkers[mNextWorkerToUse];
-        ++mNextWorkerToUse;
-        runNextTask(worker);
+        mTaskSignal.wait(lock);
     }
-}
-
-void WorkerPool::runNextTask(Worker* worker)
-{
-    std::unique_lock<std::mutex> lock(mMutex);
-    while(mRunning && mWaitingTasks.empty())
+    Task* task = nullptr;
+    if(!mShuttingDown)
     {
-        mSignal.wait(lock);
-    }
-    if(mRunning)
-    {
-        Task* task = mWaitingTasks.front();
+        task = mWaitingTasks.front();
         mWaitingTasks.pop();
-        worker->provideWork(task, [this](Worker* worker) -> void {
-            runNextTask(worker);
-        } );
     }
+    return task;
 }
 
 void WorkerPool::addWork(Task* work) 
 {
-    std::lock_guard<std::mutex> lock(mMutex);
+    std::lock_guard<std::mutex> lock(mTaskMutex);
     mWaitingTasks.push(work);
-    mSignal.notify_all();
+    mTaskSignal.notify_all();
 }
 
 }

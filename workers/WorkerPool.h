@@ -16,22 +16,23 @@ class WORKERS_API Task;
 
 class WORKERS_API WorkerPool {
 public:
-    WorkerPool(const size_t nbWorkers, const bool runInOwnThread = true);
+    WorkerPool(const size_t nbWorkers);
     ~WorkerPool();
 
     void addWork(Task* workToBeDone);
     void shutdown();
 protected:
-    void threadEntryPoint();
-    void runNextTask(Worker* worker);
+    Task* getNextTask(size_t workerIndex);
 private:
+    void shutdownWorker(Worker* worker);
+
     std::vector<Worker*> mWorkers;
     std::queue<Task*> mWaitingTasks;
-    std::mutex mMutex;
-    std::condition_variable mSignal;
-    std::atomic<bool> mRunning;
-    std::thread* mThread;
-    size_t mNextWorkerToUse;
+    std::mutex mTaskMutex;
+    std::condition_variable mTaskSignal;
+    std::mutex mWorkerCompleteMutex;
+    std::condition_variable mWorkerCompleteSignal;
+    std::atomic<bool> mShuttingDown;
 };
 
 }

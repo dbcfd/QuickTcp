@@ -15,26 +15,30 @@ class WORKERS_API Task;
 
 class WORKERS_API Worker {
 public :
-    typedef std::function<void(Worker*)> WorkCompleteFunction;
-    Worker();
+    typedef std::function<Task*(size_t)> GetTaskFunction;
+    typedef std::function<void(size_t)> WorkCompleteFunction;
+    Worker(GetTaskFunction gtFunc, WorkCompleteFunction rfFunc, size_t index);
     ~Worker();
 
-    void provideWork(Task* work, WorkCompleteFunction workDone);
     void shutdown();
 
-private:
-    std::packaged_task<bool(Task*,WorkCompleteFunction)> getWorkPromise();
-    void threadEntryPoint();
+    inline bool isRunning() const;
 
-    std::packaged_task<bool(Task*,WorkCompleteFunction)> mWorkPromise;
+private:
+    void threadEntryPoint(GetTaskFunction func, WorkCompleteFunction rfFunc, size_t index);
+
+    std::condition_variable mStartupSignal;
+    std::mutex mStartupMutex;
     std::atomic<bool> mRunning;
-    std::atomic<bool> mWorkReady;
-    std::condition_variable mWorkSignal;
-    std::mutex mWorkMutex;
     std::thread* mThread;
-    Task* mTask;
-    WorkCompleteFunction mWorkDone;
+    GetTaskFunction mGetTask;
 };
+
+//inline implementations
+bool Worker::isRunning() const
+{
+    return mRunning;
+}
 
 }
 }

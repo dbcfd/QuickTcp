@@ -4,27 +4,14 @@
 namespace quicktcp {
 namespace workers {
 
-Worker::Worker() : mRunning(false), mWorkReady(false), mWorkPromise(getWorkPromise())
+Worker::Worker(GetTaskFunction gtFunc, WorkCompleteFunction wcFunc, size_t index) : mRunning(false)
 {
-    std::unique_lock<std::mutex> lock(mWorkMutex);
-    mThread = new std::thread(std::bind(&Worker::threadEntryPoint, this));
+    mThread = new std::thread(std::bind(&Worker::threadEntryPoint, this, gtFunc, wcFunc, index));
+    std::unique_lock<std::mutex> lock(mStartupMutex);
     while(!mRunning)
     {
-        mWorkSignal.wait(lock);
+        mStartupSignal.wait(lock);
     }
-}
-
-std::packaged_task<bool(Task*, Worker::WorkCompleteFunction)> Worker::getWorkPromise()
-{
-    return std::packaged_task<bool(Task*,WorkCompleteFunction)>([this](Task* task, WorkCompleteFunction func) -> bool {
-        std::future<bool> workDone = mWorkPromise.get_future();
-        workDone.wait();
-        bool ret = false;
-        if(nullptr != task) ret = task->perform();
-        mWorkPromise.swap(getWorkPromise());
-        func(this);
-        return ret;
-    } );
 }
 
 Worker::~Worker() 
@@ -37,36 +24,21 @@ Worker::~Worker()
     delete mThread;
 }
 
-void Worker::threadEntryPoint() 
+void Worker::threadEntryPoint(GetTaskFunction gtFunc, WorkCompleteFunction wcFunc, size_t index) 
 {
     mRunning = true;
-    mWorkSignal.notify_all();
+    mStartupSignal.notify_all();
     while(mRunning)
     {
-        std::unique_lock<std::mutex> lock(mWorkMutex);
-        while(!mWorkReady) 
-        {
-            mWorkSignal.wait(lock);
-        }
-        if(mRunning) mWorkPromise(mTask, mWorkDone);
-    }
-}
-
-void Worker::provideWork(Task* work, WorkCompleteFunction workDone)
-{
-    if(mRunning)
-    {
-        mTask = work;
-        mWorkDone = workDone;
-        mWorkReady = true;
-        mWorkSignal.notify_all();
+        Task* task = gtFunc(index);
+        if(nullptr != task) task->perform();
+        wcFunc(index);
     }
 }
 
 void Worker::shutdown()
 {
     mRunning = false;
-    mWorkPromise(nullptr, [](Worker*) -> void {} );
 }
 
 }
