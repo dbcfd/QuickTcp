@@ -1,92 +1,34 @@
 #ifdef WINDOWS
-#include "tcp/windows/Server.h"
+#include "server/windows/Server.h"
 
-#include <sstream>
+#include "server/windows/ServerConnection.h"
 
-#include "tcp/windows/ServerConnection.h"
-#include "tcp/windows/Callback.h"
-
-namespace c11http {
-namespace tcp {
+namespace quicktcp {
+namespace server {
 namespace windows {
 
-/**
- * Callback invoked after server receives data from a client. Passes the client information to the
- * server callback
- */
-void CALLBACK ClientDataReady(
-        IN DWORD dwError,
-        IN DWORD cbTransferred,
-        IN LPWSAOVERLAPPED lpOverlapped,
-        IN DWORD dwFlags
-)
-{
-    ServerConnection::OverlapType* overlap = static_cast<ServerConnection::OverlapType*>( lpOverlapped );
-    ServerConnection* client = overlap->derived;
-    Server* server = client->getServer();
 
-    server->queueReceiveFromConnection( client );
-
-    Callback* callback = server->getCallback();
-
-    if( nullptr != callback ) callback->receiveComplete(client->getBuffer(), client->getBytes());
-}
-
-/**
- * Callback invoked after data has been sent to client.
- */
-void CALLBACK DataSentToClient(
-        IN DWORD dwError,
-        IN DWORD cbTransferred,
-        IN LPWSAOVERLAPPED lpOverlapped,
-        IN DWORD dwFlags
-)
-{
-    ServerConnection::OverlapType* overlap = static_cast<ServerConnection::OverlapType*>( lpOverlapped );
-    ServerConnection* client = overlap->derived;
-    Server* server = client->getServer();
-
-    if( server->isShutdown() ) return;
-
-    ServerOverlapData* serverData = static_cast<ServerOverlapData*>( server->getOverlap()->derived );
-    std::string target = serverData->targets.front();
-    serverData->targets.pop();
-
-    Callback* callback = server->getCallback();
-
-    WSAResetEvent( overlap->hEvent );
-
-    if( 0 != callback ) callback->sendComplete( target, cbTransferred );
-}
-
-Server::Server(Callback* _callback, const unsigned int port) throw(std::runtime_error) :
-        mCallback(_callback), mServerSocket(NULL), mIncomingSocket(NULL), mHasBeenShutdown(false), mWaitingForEvents(
-                false)
+Server::Server(workers::WorkerPool* pool, const unsigned int port, const unsigned int backlog, const unsigned int maxUnusedConnections, iface::IServer::ConnectionAdded caFunc) :
+    IServer(pool), mServerSocket(nullptr), mIncomingSocket(nullptr), mIgnoreClose(false), mMaxUnusedConnections(maxUnusedConnections), mUnusedConnections(0), mConnectionAdded(caFunc)
 {
     //startup winsock
     WSAData wsaData;
-    int iResult;
-    iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
 
-    if(iResult != 0)
+    if(WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
     {
-        std::stringstream sstr;
-        sstr << "WSAStartup Error " << iResult;
-        throw(std::runtime_error(sstr.str()));
+        throw(std::runtime_error("WSAStartup Error"));
     }
 
-    mOverlapData.server = this;
+    createOverlap(this);
 
-    createOverlap(&mOverlapData);
-
-    createServerSocket(port);
+    createServerSocket(port, backlog);
 
     prepareForServerConnection();
 }
 
 Server::~Server()
 {
-    shutdown();
+    disconnect();
     WSARecvDisconnect(mServerSocket->getSocket(), 0);
     WSASendDisconnect(mServerSocket->getSocket(), 0);
     mServerSocket->closeSocket();
@@ -99,220 +41,116 @@ Server::~Server()
     mIncomingSocket = 0;
 }
 
-void Server::addConnection(ServerConnection* client, const std::string& identifier)
+void Server::disconnect()
 {
-    mConnections.addServerConnection(client, identifier);
-}
-
-const bool Server::isShutdown() const
-{
-    return mHasBeenShutdown;
-}
-
-Callback* Server::getCallback()
-{
-    return mCallback;
-}
-
-void Server::shutdown()
-{
-    mHasBeenShutdown = true;
-    std::vector<ServerConnection*> connectionPtrs = mConnections.getConnections();
-
-    for(std::vector<ServerConnection*>::const_iterator iter = connectionPtrs.begin();
-            iter != connectionPtrs.end(); ++iter)
+    if(setRunning(false))
     {
-        ServerConnection* connection = (*iter);
-
-        WSARecvDisconnect(connection->getSocket(), 0);
-        WSASendDisconnect(connection->getSocket(), 0);
-
-        mConnections.removeServerConnection(connection->getOverlap()->hEvent);
+        //we were running
+        WSASetEvent(getOverlap()->hEvent);
+        std::future<bool> fut = mDoneWaitingForEvents.get_future();
+        fut.wait();
     }
-
-    WSASetEvent(getOverlap()->hEvent);}
-
-void Server::send(const char* data, const unsigned int count, const std::string& identifier)
-        throw(std::runtime_error)
-{
-    ServerConnection* connection = mConnections.getServerConnection(identifier);
-
-    send(data, count, connection, true);
-
-    mOverlapData.targets.push(identifier);
-
+    mIgnoreClose = true;
+    mHandles.clear();
+    std::for_each(mConnections.begin(), mConnections.end(), [](std::pair<const WSAEVENT, std::shared_ptr<iface::IServerConnection>> iter) {
+        iter.second->close();
+    } );
+    mConnections.clear();
 }
 
-void Server::send(const char* data, const unsigned int count, ServerConnection* connection,
-        const bool reportToCallback) throw(std::runtime_error)
+void Server::connectionClosed(WSAEVENT handle)
 {
-    WSABUF dataBuffer;
-    DWORD flags = 0;
-    DWORD nbBytes = 0;
-    dataBuffer.len = count;
-    dataBuffer.buf = (CHAR*) data;
-
-    mOverlapData.targets.push(connection->getIdentifier());
-
-    /**
-     * Queue an asynchronous send to a specific client. This should complete
-     * immediately, invoking the callback when send i/o completes.
-     */
-    if(SOCKET_ERROR
-            == WSASend(connection->getSocket(), &dataBuffer, 1, &nbBytes, flags,
-                    connection->getOverlap(), DataSentToClient))
+    if(!mIgnoreClose)
     {
-        if(WSA_IO_PENDING != WSAGetLastError())
-        {
-            std::stringstream sstr;
-            sstr << "error sending data to socket " << connection->getSocket() << " - "
-                    << WSAGetLastError();
-
-            if(reportToCallback)
-            {
-                Callback* callback = getCallback();
-
-                if(0 != callback)
-                    callback->sendFailed(connection->getIdentifier(), sstr.str());
-
-                mConnections.removeServerConnection(connection->getIdentifier());
-            }
-        }
-    }
-    //small send, completed immediately, report to callback
-    else if(reportToCallback)
-    {
-        Callback* callback = getCallback();
-
-        if(0 != callback)
-            callback->sendComplete(connection->getIdentifier(), count);
+        std::lock_guard<std::mutex> lock(mConnectionsMutex);
+        ++mUnusedConnections;
+        mConnections.erase(handle);
     }
 }
 
-void Server::broadcast(const char* data, const unsigned int count)
+HANDLE Server::performWaitForEvents()
 {
-    std::vector<ServerConnection*> connectionPtrs = mConnections.getConnections();
-
-    for(std::vector<ServerConnection*>::const_iterator iter = connectionPtrs.begin();
-            iter != connectionPtrs.end(); ++iter)
-    {
-        ServerConnection* connection = (*iter);
-
-        send(data, count, connection, true);
-    }
-}
-
-HANDLE Server::performWaitForEvents() throw(std::runtime_error)
-{
-
     DWORD wait_rc = WSA_WAIT_IO_COMPLETION;
-
-    std::vector < WSAEVENT > handles;
 
     /**
      * Wait until i/o is completed on the handle triggered. A handle
      * can be triggered without i/o being complete.
      */
-    while(WSA_WAIT_IO_COMPLETION == wait_rc && !mHasBeenShutdown) //can receive shutdown while still waiting on io completion
+    while(WSA_WAIT_IO_COMPLETION == wait_rc && isRunning()) //can receive shutdown while still waiting on io completion
     {
-        handles = mConnections.getHandleArray(getOverlap()->hEvent);
-
-        if(WSA_WAIT_FAILED
-                == (wait_rc = WSAWaitForMultipleEvents(handles.size(), &(handles[0]), FALSE,
-                        WSA_INFINITE, TRUE)))
+        if(WSA_WAIT_FAILED == (wait_rc = WSAWaitForMultipleEvents(mHandles.size(), &(mHandles[0]), FALSE, WSA_INFINITE, TRUE)))
         {
-            int error = WSAGetLastError();
-
-            std::stringstream sstr;
-            sstr << "WSAWaitForMultipleEvents Error " << WSAGetLastError();
-            throw(std::runtime_error(sstr.str()));
+            throw(std::runtime_error("WSAWaitForMultipleEvents Error"));
         }
     }
 
-    if(mHasBeenShutdown)
-        return handles[0]; //return a handle within range if shut down
+    if(!isRunning())
+    {
+        return mHandles[0]; //return a handle within range if shut down
+    }
 
-    HANDLE handle = handles[(wait_rc - WSA_WAIT_EVENT_0)];
+    HANDLE handle = mHandles[(wait_rc - WSA_WAIT_EVENT_0)];
+
+    if(mUnusedConnections > mMaxUnusedConnections)
+    {
+        //rebuild our handle array
+        std::lock_guard<std::mutex> lock(mConnectionsMutex);
+        mHandles.clear();
+        mHandles.reserve(mConnections.size());
+        std::for_each(mConnections.begin(), mConnections.end(), [this](std::pair<WSAEVENT,std::shared_ptr<iface::IServerConnection>> iter) {
+            this->mHandles.push_back(iter.first);
+        } );
+    }
     return handle;
 }
 
-void Server::waitForEvents() throw(std::runtime_error)
+void Server::waitForEvents()
 {
-
-    while(!mHasBeenShutdown)
+    if(!mHandles.empty())
     {
-        mWaitingForEvents = true;
-        HANDLE handleId = performWaitForEvents();
-
-        if(!mHasBeenShutdown) //if not shutdown, handle returned is valid and should be examined
+        setRunning(true);
+        while(isRunning())
         {
-            WSAResetEvent(handleId);
+            HANDLE handleId = performWaitForEvents();
 
-            if(getOverlap()->hEvent == handleId)
+            if(isRunning()) //if running, handle returned is valid and should be examined
             {
-                //if the event triggered is the server event, add a new connection
-                addNewConnection();
-            }
-            else
-            {
-                /**
-                 * Handle a receive event for one of the server connections, send
-                 * events are handled via a callback.
-                 */
-                ServerConnection* connection = mConnections.getServerConnection(handleId);
-                DWORD flags = 0;
-                DWORD nbBytes = 0;
+                WSAResetEvent(handleId);
 
-                //make sure connection exists and recv has completed
-                if(connection
-                        && WSAGetOverlappedResult(connection->getSocket(),
-                                (WSAOVERLAPPED*) connection->getOverlap(), &nbBytes, TRUE, &flags))
+                if(getOverlap()->hEvent == handleId)
                 {
-                    //received data from the connection
-                    Callback* callback = getCallback();
-
-                    if(0 != callback)
+                    //if the event triggered is the server event, add a new connection
+                    addNewConnection();
+                }
+                else
+                {
+                    std::shared_ptr<iface::IServerConnection> connection = mConnections[handleId];
+                    if(nullptr != connection)
                     {
-                        if(0 == nbBytes)
-                        {
-                            callback->disconnected(connection->getIdentifier());
-                            mConnections.removeServerConnection(handleId);
-                        }
-                        else
-                        {
-                            callback->receiveComplete(connection->getIdentifier(),
-                                    connection->getBuffer(), nbBytes);
-                        }
-                    }
-
-                    //queue the socket to receive again
-                    if(!mHasBeenShutdown && 0 != nbBytes)
-                    {
-                        queueReceiveFromConnection(connection);
+                        connection->receive();
                     }
                 }
             }
         }
+        mDoneWaitingForEvents.set_value(true);
     }
-
-    mWaitingForEvents = false;
-}
-
-const bool Server::isWaitingForEvents() const
-{
-    return mWaitingForEvents;
 }
 
 void Server::addNewConnection() throw(std::runtime_error)
 {
+    static ServerConnection::ConnectionClosed ccFunc = std::bind(&Server::connectionClosed, this, std::placeholders::_1);
     BOOL bOptVal = TRUE;
     int bOptLen = sizeof(BOOL);
     //update the socket context based on our server
     setsockopt(mIncomingSocket->getSocket(), SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, (char*) &bOptVal,
             bOptLen);
-    ServerConnection* connection = new ServerConnection(*mIncomingSocket, this);
+    ServerConnection* connection = new ServerConnection(*mIncomingSocket, generateIdentifier(), getWorkerPool(), ccFunc);
+    std::shared_ptr<iface::IServerConnection> connectionPtr(connection);
+    HANDLE handle = connection->getOverlap()->hEvent;
+    mHandles.push_back(handle);
+    mConnections.insert(std::make_pair(handle, connectionPtr));
     delete mIncomingSocket;
-    mIncomingSocket = NULL;
+    mIncomingSocket = nullptr;
 
     DWORD flags = 0;
     DWORD nbBytes = 0;
@@ -322,56 +160,18 @@ void Server::addNewConnection() throw(std::runtime_error)
      * some point in time. We queue a receive that will call back to a method that
      * can handle the connection information.
      */
-    int iResult = WSARecv(connection->getSocket(), //socket
-            connection->getDataBuffer(), //WSABuf array
-            1, //number of buffers
-            &nbBytes, //bytes received
-            &flags, //flags
-            (WSAOVERLAPPED*) connection->getOverlap(), //overlap
-            ConnectionInformationReceivedFromClient); //callback
+    connection->receive();
 
-    if(SOCKET_ERROR == iResult)
-    {
-        int lastError = WSAGetLastError();
-
-        if(WSA_IO_PENDING != lastError)
-        {
-            std::stringstream sstr;
-            sstr << "Error prepping client socket for receive " << WSAGetLastError();
-            throw(std::runtime_error(sstr.str()));
-        }
-    }
+    mConnectionAdded(connectionPtr);
 
     //prepare for another client to connect
     prepareForServerConnection();
 }
 
-void Server::queueReceiveFromConnection(ServerConnection* connection) throw(std::runtime_error)
-{
-    DWORD flags = 0;
-
-    WSAResetEvent(connection->getOverlap()->hEvent);
-
-    int iResult = WSARecv(connection->getSocket(), connection->getDataBuffer(), 1, 0, &flags,
-            (WSAOVERLAPPED*) connection->getOverlap(), 0);
-
-    if(SOCKET_ERROR == iResult)
-    {
-        int lastError = WSAGetLastError();
-
-        if(WSA_IO_PENDING != lastError)
-        {
-            std::stringstream sstr;
-            sstr << "Error prepping client socket for receive" << WSAGetLastError();
-            throw(std::runtime_error(sstr.str()));
-        }
-    }
-}
-
-void Server::createServerSocket(const unsigned int port) throw(std::runtime_error)
+void Server::createServerSocket(const unsigned int port, const unsigned int backlog)
 {
     //WSA startup successful, create address info
-    struct addrinfo* result = NULL, *ptr = NULL, hints;
+    struct addrinfo* result = nullptr, *ptr = nullptr, hints;
 
     ZeroMemory(&hints, sizeof(hints));
     hints.ai_family = AF_INET;
@@ -386,11 +186,8 @@ void Server::createServerSocket(const unsigned int port) throw(std::runtime_erro
 
     if(iResult != 0)
     {
-        std::stringstream sstr;
-        sstr << "getaddrinfo Error " << iResult;
-        freeaddrinfo(result);
         WSACleanup();
-        throw(std::runtime_error(sstr.str()));
+        throw(std::runtime_error("getaddreinfo Error"));
     }
 
     //getaddrinfo successful, create socket
@@ -398,19 +195,15 @@ void Server::createServerSocket(const unsigned int port) throw(std::runtime_erro
 
     //socket creation successful, bind to socket
     iResult = bind(mServerSocket->getSocket(), result->ai_addr, (int) result->ai_addrlen);
+    freeaddrinfo(result);
 
     if(SOCKET_ERROR == iResult)
     {
-        std::stringstream sstr;
-        sstr << "bind Error " << WSAGetLastError();
-        freeaddrinfo(result);
-        throw(std::runtime_error(sstr.str()));
+        
+        throw(std::runtime_error("bind error"));
     }
 
-    //socket ready to go
-    freeaddrinfo(result);
-
-    if(SOCKET_ERROR == listen(mServerSocket->getSocket(), 5)) //TODO: backlog config
+    if(SOCKET_ERROR == listen(mServerSocket->getSocket(), backlog))
     {
         std::stringstream sstr;
         sstr << "listen Error " << WSAGetLastError();
@@ -433,11 +226,9 @@ void Server::prepareForServerConnection() throw(std::runtime_error)
     if(SOCKET_ERROR
             == WSAIoctl(mServerSocket->getSocket(), SIO_GET_EXTENSION_FUNCTION_POINTER,
                     &acceptex_guid, sizeof(acceptex_guid), &pfnAcceptEx, sizeof(pfnAcceptEx),
-                    &bytes, NULL, NULL))
+                    &bytes, nullptr, nullptr))
     {
-        std::stringstream sstr;
-        sstr << "Failed to obtain AcceptEx() pointer";
-        throw(std::runtime_error(sstr.str()));
+        throw(std::runtime_error("Failed to obtain AcceptEx() pointer"));
     }
 
     /**
@@ -455,9 +246,7 @@ void Server::prepareForServerConnection() throw(std::runtime_error)
 
         if(WSA_IO_PENDING != lasterror)
         {
-            std::stringstream sstr;
-            sstr << "AcceptEx Error()";
-            throw(std::runtime_error(sstr.str()));
+            throw(std::runtime_error("AcceptEx Error()"));
         }
     }
 }

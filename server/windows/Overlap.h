@@ -2,21 +2,12 @@
 
 #include <sstream>
 
-#include "tcp/windows/Platform.h"
-#include "tcp/windows/Winsock2.h"
+#include "server/windows/Platform.h"
+#include "server/windows/Winsock2.h"
 
-namespace c11http {
-namespace tcp {
+namespace quicktcp {
+namespace server {
 namespace windows {
-
-class TCP_WINDOWS_API OverlapCreationException: public std::runtime_error
-{
-public:
-    OverlapCreationException(const std::string& what)
-            : std::runtime_error(what)
-    {
-    }
-};
 
 /**
  * Overlaps are used by Winsock2 asynchronous calls to provide notifications when events occur,
@@ -36,10 +27,10 @@ public:
     };
     typedef OverlapExtend<T> OverlapType;
     Overlap()
-            : mOverlap(NULL)
+            : mOverlap(nullptr)
     {
     }
-    Overlap(T* derived) throw (OverlapCreationException)
+    Overlap(T* derived)
     {
         createOverlap(derived);
     }
@@ -48,10 +39,10 @@ public:
         WSACloseEvent(mOverlap->hEvent);
         mOverlap->hEvent = WSA_INVALID_EVENT;
 
-        if (mOverlap != NULL)
+        if (mOverlap != nullptr)
         {
             HeapFree(GetProcessHeap(), 0, mOverlap);
-            mOverlap = NULL;
+            mOverlap = nullptr;
         }
     }
 
@@ -61,7 +52,7 @@ public:
     }
 
 protected:
-    void createOverlap(T* derived) throw (std::runtime_error)
+    void createOverlap(T* derived)
     {
         //
         // Allocate an overlapped structure.
@@ -75,20 +66,16 @@ protected:
         //
         // Did the HeapAllocation FAIL??
         //
-        if (cOverlap == NULL)
+        if (cOverlap == nullptr)
         {
-            std::stringstream sstr;
-            sstr << "Overlap HeapAlloc()";
-            throw(OverlapCreationException(sstr.str()));
+            throw(std::runtime_error("Overlap HeapAlloc()"));
         }
 
         SecureZeroMemory(cOverlap, sizeof(OverlapType));
 
         if (WSA_INVALID_EVENT == (cOverlap->hEvent = WSACreateEvent()))
         {
-            std::stringstream sstr;
-            sstr << "WSACreateEvent";
-            throw(OverlapCreationException(sstr.str()));
+            throw(std::runtime_error("WSACreateEvent"));
         }
 
         cOverlap->derived = derived;

@@ -1,10 +1,8 @@
 #ifdef WINDOWS
-#include "tcp/windows/Socket.h"
+#include "server/windows/Socket.h"
 
-#include <sstream>
-
-namespace c11http {
-namespace tcp {
+namespace quicktcp {
+namespace server {
 namespace windows {
 
 Socket::Socket(const SOCKET _sckt) :
@@ -18,16 +16,14 @@ SOCKET Socket::getSocket() const
     return mSocket;
 }
 
-Socket::Socket() throw(std::runtime_error)
+Socket::Socket()
 {
     mSocket = INVALID_SOCKET;
-    mSocket = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, NULL, 0, WSA_FLAG_OVERLAPPED);
+    mSocket = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, nullptr, 0, WSA_FLAG_OVERLAPPED);
 
     if(mSocket == INVALID_SOCKET)
     {
-        std::stringstream sstr;
-        sstr << "Socket Creation Error " << WSAGetLastError();
-        throw(std::runtime_error(sstr.str()));
+        throw(std::runtime_error("Socket Creation Error"));
     }
 
     //
@@ -48,8 +44,6 @@ Socket::Socket() throw(std::runtime_error)
 
     if(nRet == SOCKET_ERROR)
     {
-        std::stringstream sstr;
-        sstr << "setsockopt(SNDBUF) failed:" << WSAGetLastError();
         //TODO: log
     }
 }

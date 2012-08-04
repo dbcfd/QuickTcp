@@ -1,54 +1,53 @@
 #pragma once
 
-#include "tcp/windows/Overlap.h"
-#include "tcp/windows/Winsock2.h"
+#include "server/interface/IServerConnection.h"
 
-namespace c11http {
-namespace tcp {
+#include "server/windows/Overlap.h"
+#include "server/windows/Winsock2.h"
+
+namespace quicktcp {
+namespace server {
 namespace windows {
 
 class Socket;
-class Server;
 
 /**
  * Represent a connection between a server and a client. An underlying socket
  * is used for communication between the server and client.
  */
-class TCP_WINDOWS_API ServerConnection: public Overlap<ServerConnection>
+class SERVER_WINDOWS_API ServerConnection: public iface::IServerConnection, public Overlap<ServerConnection>
 {
 public:
-	/**
-	 * Extension of Overlapped structure used by asynchronous calls. See Overlap for more information
-	 */
-	struct ServerConnectionOverlap: public WSAOVERLAPPED
-	{
-		ServerConnection* connection;
-	};
-
+    typedef std::function<void(HANDLE)> ConnectionClosed;
 	/**
 	 * Utilizes the socket created through an asynchronous accept (AcceptEx), to maintain a connection
 	 * between a server and a client
 	 */
-	ServerConnection(const Socket& socket, Server* server)
-	throw (std::runtime_error);
-	~ServerConnection();
+    ServerConnection(const Socket& socket, 
+        const std::string& identifier, 
+        workers::WorkerPool* pool,
+        ConnectionClosed ccFunc);
+	virtual ~ServerConnection();
 
-	const SOCKET getSocket() const;
-	const DWORD& getBytes() const;
-	const char* getBuffer() const;
-	LPWSABUF getDataBuffer();
-	const DWORD& getOperation() const;
-	Server* getServer() const;
+	inline const SOCKET getSocket() const;
+
+    virtual void close();
 
 private:
+    virtual bool blockingSend(const utilities::ByteStream& data);
+    virtual utilities::ByteStream blockingReceive();
+
 	SOCKET mSocket; //socket
 	DWORD mBytes;//bytes received or sent
 	char mBuffer[MAX_BUFFER_SIZE];//storage buffer
 	WSABUF mDataBuffer;//Winsock2 specific buffer for send/recv
-	Server* mServer;//Server that has this connection
-	DWORD mOperation;
-
+    ConnectionClosed mConnectionClosed;
 };
+
+const SOCKET ServerConnection::getSocket() const
+{
+    return mSocket;
+}
 
 }
 }
