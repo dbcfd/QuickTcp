@@ -31,7 +31,7 @@ class SERVER_INTERFACE_API IServer {
 public:
     typedef std::function<void(std::shared_ptr<IServerConnection>)> ConnectionAdded;
 
-    IServer(workers::WorkerPool* pool, ConnectionAdded caFunc);
+    IServer(workers::WorkerPool* pool);
 
     virtual void waitForEvents() = 0;
     virtual void disconnect() = 0;
@@ -39,17 +39,14 @@ public:
     inline bool isRunning() const;
 protected:
     std::string generateIdentifier();
-    void addedConnection(std::shared_ptr<IServerConnection> connection);
 
     inline bool setRunning(const bool running);
     inline workers::WorkerPool* getWorkerPool() const;
 private:
-    virtual void shutdownImpl() = 0;
     workers::WorkerPool* mWorkerPool;
     std::chrono::time_point<std::chrono::system_clock> mLastTime;
     std::time_t mLastTimeT;
     std::atomic<bool> mRunning;
-    ConnectionAdded mConnectionAdded;
     int mIdentifiersDuringTimeframe;
 };
 

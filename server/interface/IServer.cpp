@@ -7,15 +7,10 @@ namespace quicktcp {
 namespace server {
 namespace iface {
 
-IServer::IServer(workers::WorkerPool* pool, IServer::ConnectionAdded caFunc) : 
-    mWorkerPool(pool), mLastTime(std::chrono::system_clock::now()), mIdentifiersDuringTimeframe(0), mConnectionAdded(caFunc) 
+IServer::IServer(workers::WorkerPool* pool) : 
+    mWorkerPool(pool), mLastTime(std::chrono::system_clock::now()), mIdentifiersDuringTimeframe(0)
 {
    
-}
-
-void IServer::addedConnection(std::shared_ptr<IServerConnection> connection)
-{
-    mConnectionAdded(connection);
 }
 
 std::string IServer::generateIdentifier()
