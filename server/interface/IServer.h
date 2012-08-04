@@ -1,24 +1,74 @@
 #pragma once
 
-namespace c11http {
-namespace tcp {
+#include "server/interface/Platform.h"
+
+#include <atomic>
+#include <chrono>
+#include <ctime>
+#include <functional>
+#include <memory>
+
+namespace quicktcp {
+
+namespace workers {
+class WorkerPool;
+}
+
+namespace utilities {
+class ByteStream;
+}
+
+namespace server {
+namespace iface {
+
+class IServerConnection;
 
 /**
  * Server interface. Platform specific implementations will implement this interface, allowing
  * common access to the platform servers
  */
-class IServer {
+class SERVER_INTERFACE_API IServer {
 public:
-   IServer(WorkerPool* pool);
+    typedef std::function<void(std::shared_ptr<IServerConnection>)> ConnectionAdded;
 
-   virtual void send(IServerConnection* connection, const std::string& msg) = 0;
-   virtual void waitForEvents() = 0;
-   virtual void disconnect();
+    IServer(workers::WorkerPool* pool, ConnectionAdded caFunc);
 
-   void addWork(std::function func);
+    virtual void waitForEvents() = 0;
+    virtual void disconnect() = 0;
+
+    inline bool isRunning() const;
+protected:
+    std::string generateIdentifier();
+    void addedConnection(std::shared_ptr<IServerConnection> connection);
+
+    inline bool setRunning(const bool running);
+    inline workers::WorkerPool* getWorkerPool() const;
 private:
-   WorkerPool* mPool;
+    virtual void shutdownImpl() = 0;
+    workers::WorkerPool* mWorkerPool;
+    std::chrono::time_point<std::chrono::system_clock> mLastTime;
+    std::time_t mLastTimeT;
+    std::atomic<bool> mRunning;
+    ConnectionAdded mConnectionAdded;
+    int mIdentifiersDuringTimeframe;
 };
 
+//inline implementations
+bool IServer::isRunning() const
+{
+    return mRunning;
+}
+
+bool IServer::setRunning(const bool running)
+{
+    return mRunning.exchange(running);
+}
+
+workers::WorkerPool* IServer::getWorkerPool() const
+{
+    return mWorkerPool;
+}
+
+}
 }
 }

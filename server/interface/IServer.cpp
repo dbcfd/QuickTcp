@@ -1,12 +1,41 @@
-#include "tcp/IServer.h"
+#include "server/interface/IServer.h"
 
-namespace c11http {
-namespace tcp {
+#include <iomanip>
+#include <sstream>
 
-IServer::IServer(WorkerPool* pool) : mPool(pool) {
+namespace quicktcp {
+namespace server {
+namespace iface {
+
+IServer::IServer(workers::WorkerPool* pool, IServer::ConnectionAdded caFunc) : 
+    mWorkerPool(pool), mLastTime(std::chrono::system_clock::now()), mIdentifiersDuringTimeframe(0), mConnectionAdded(caFunc) 
+{
    
 }
 
-void IServer::addWork(std::function func) {
-   mPool->addWork(func);
+void IServer::addedConnection(std::shared_ptr<IServerConnection> connection)
+{
+    mConnectionAdded(connection);
+}
+
+std::string IServer::generateIdentifier()
+{
+    std::chrono::time_point<std::chrono::system_clock> now(std::chrono::system_clock::now());
+    if(0 != std::chrono::duration_cast<std::chrono::seconds>(now - mLastTime).count())
+    {
+        mLastTime = now;
+        mLastTimeT = std::chrono::system_clock::to_time_t(mLastTime);
+        mIdentifiersDuringTimeframe = 0;
+    }
+    std::stringstream sstr;
+    struct tm* tmptr = nullptr;
+    if(0 == localtime_s(tmptr, &mLastTimeT))
+    {
+        sstr << std::put_time(tmptr, "%F %T") << mIdentifiersDuringTimeframe;
+    }
+    return sstr.str();
+}
+
+}
+}
 }
