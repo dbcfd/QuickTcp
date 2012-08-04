@@ -102,7 +102,7 @@ void Server::waitForEvents() throw (std::runtime_error)
         /**
          * Select from specified file descriptors, will block
          */
-        numfds = select(fdmax + 1, &readFds, &writeFds, NULL, 0);
+        numfds = select(fdmax + 1, &readFds, &writeFds, nullptr, 0);
 
         if (-1 == numfds)
         {

@@ -1,50 +1,55 @@
 #pragma once
 
-#include "tcp/Platform.h"
+#include "server/Platform.h"
 
-namespace c11http {
-namespace tcp {
+#include "server/interface/IServer.h"
+
+#include <thread>
+
+namespace quicktcp {
+namespace server {
 
 /**
  * Generic implementation of a server. Receives data from a platform implementation (posix/winsock) and then
  * passes that information along to a worker.
  */
-class TCP_API Server {
+class SERVER_API Server {
 public:
     /**
      * Create a server listening on the specified port, notifying users of events with the specified callback.
      */
-    Server(const unsigned int port);
+    Server(workers::WorkerPool* pool, unsigned int port, const unsigned int backlog, const unsigned int maxUnusedConnections, const iface::IServer::ConnectionAdded caFunc);
     ~Server();
 
     /**
      * Blocks the current thread, waiting until an event occurs. Events include connection attempts, sending/receiving
      * data, and shutdown.
      */
-    void waitForEvents();
-    /**
-     * Send a message to a specific connection, as indicated by the identifier.
-     */
-    void send(const char* data, const unsigned int count, const std::string& identifier);
-    /**
-     * Send a message to all connections.
-     */
-    void broadcast(const char* data, const unsigned int count);
+    void waitForEvents(const bool runInOwnThread);
     /**
      * Shutdown this server, closing all connections.
      */
-    void shutdown();
+    inline void disconnect();
 
-    virtual void receiveComplete(const std::string& identifier, const char* data, const unsigned int count) = 0;
+    inline bool isRunning() const;
 
 private:
+    void serverWaitForEvents();
 
-	class PlatformCallback;
-	class PlatformServer;
-
-	PlatformCallback* mCallback;
-	PlatformServer* mServer;
+    iface::IServer* mServer;
+    std::thread* mThread;
 };
+
+//inline implementations
+void Server::disconnect() 
+{
+    mServer->disconnect();
+}
+
+bool Server::isRunning() const
+{
+    return mServer->isRunning();
+}
 
 }
 }

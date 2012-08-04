@@ -3,15 +3,11 @@ add_subdirectory(posix)
 add_subdirectory(windows)
 
 set (TARGET Server)
-add_definitions(-DHTTP_BUILD)
+add_definitions(-DSERVER_BUILD)
 
 file(GLOB HEADERS "*.h")
 
 file(GLOB SOURCES "*.cpp")
-
-if(UNIX)
-	set(DEPENDENCIES ${DEPENDENCIES} rt)
-endif()	
 
 if(UNIX)
 	SET (DEPENDENCIES ${DEPENDENCIES} ServerPosix)
