@@ -33,24 +33,24 @@ public:
 		free(mFloatArray);
 	}
 
-	virtual void readFromStream()
+	virtual void readFromStream(BinarySerializer& serializer)
 	{
-		readT<int>(mInt);
-		readT<double>(mDouble);
-		readString(mString);
-		readT<size_t>(mFloatArraySize);
+		serializer.readT<int>(mInt);
+		serializer.readT<double>(mDouble);
+		serializer.readString(mString);
+		serializer.readT<size_t>(mFloatArraySize);
 		free(mFloatArray);
 		mFloatArray = (float*)malloc(sizeof(float)*mFloatArraySize);
-		readT<float>(mFloatArray, mFloatArraySize);
+		serializer.readT<float>(mFloatArray, mFloatArraySize);
 	}
 
-	virtual void writeToStream()
+	virtual void writeToStream(BinarySerializer& serializer)
 	{
-		writeT<int>(mInt);
-		writeT<double>(mDouble);
-		writeString(mString);
-		writeT<size_t>(mFloatArraySize);
-		writeT<float>(mFloatArray, mFloatArraySize);
+		serializer.writeT<int>(mInt);
+		serializer.writeT<double>(mDouble);
+		serializer.writeString(mString);
+		serializer.writeT<size_t>(mFloatArraySize);
+		serializer.writeT<float>(mFloatArray, mFloatArraySize);
 	}
 
 	int mInt;
@@ -141,6 +141,7 @@ TEST_F(BinarySerializableTest, READ)
 		{
 			EXPECT_EQ(floatVal[i], testObj->mFloatArray[i]);
 		}
+        delete testObj;
 	}	
 }
 

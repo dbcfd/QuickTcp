@@ -27,10 +27,12 @@ void BinarySerializable::fromByteStream(const ByteStream& byteStream)
 	}
 	if(0 == tmpfile_s(&mFile))
 	{
-		writeT<char>(byteStream.getBuffer(), byteStream.getSize());
+        mSerializer.setFile(mFile, 0);
+		mSerializer.writeT<char>(byteStream.getBuffer(), byteStream.getSize());
 		mSize = ftell(mFile);
 		rewind(mFile);
-		readFromStream();
+        mSerializer.setFile(mFile, mSize);
+        readFromStream(mSerializer);
 	}
 	else
 	{
@@ -51,7 +53,8 @@ void BinarySerializable::fromBinaryStream(FILE* binaryStream)
 		fseek(mFile, 0, SEEK_END);
 		mSize = ftell(mFile);
 		rewind(mFile);
-		readFromStream();
+        mSerializer.setFile(mFile, mSize);
+        readFromStream(mSerializer);
 	}
 }
 
@@ -62,8 +65,9 @@ void BinarySerializable::fillStream()
 		mSize = 0;
 		if(0 == tmpfile_s(&mFile))
 		{
+            mSerializer.setFile(mFile, 0);
 			try {
-				writeToStream();
+                writeToStream(mSerializer);
 			}
 			catch(std::runtime_error)
 			{
@@ -82,9 +86,10 @@ ByteStream BinarySerializable::toByteStream()
 	{
 		rewind(mFile);
 		vec.resize(mSize, 0);
+        mSerializer.setFile(mFile, mSize);
 		try
 		{
-			readT<char>(&(vec[0]), mSize);
+			mSerializer.readT<char>(&(vec[0]), mSize);
 		}
 		catch(std::runtime_error)
 		{
