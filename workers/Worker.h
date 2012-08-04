@@ -7,6 +7,7 @@
 #include <future>
 #include <functional>
 #include <mutex>
+#include <memory>
 
 namespace quicktcp {
 namespace workers {
@@ -15,7 +16,7 @@ class WORKERS_API Task;
 
 class WORKERS_API Worker {
 public :
-    typedef std::function<Task*(size_t)> GetTaskFunction;
+    typedef std::function<std::shared_ptr<Task>(size_t)> GetTaskFunction;
     typedef std::function<void(size_t)> WorkCompleteFunction;
     Worker(GetTaskFunction gtFunc, WorkCompleteFunction rfFunc, size_t index);
     ~Worker();

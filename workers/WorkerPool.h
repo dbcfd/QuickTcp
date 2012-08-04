@@ -7,6 +7,7 @@
 #include <future>
 #include <queue>
 #include <mutex>
+#include <memory>
 
 namespace quicktcp {
 namespace workers {
@@ -19,15 +20,15 @@ public:
     WorkerPool(const size_t nbWorkers);
     ~WorkerPool();
 
-    void addWork(Task* workToBeDone);
+    void addWork(std::shared_ptr<Task> workToBeDone);
     void shutdown();
 protected:
-    Task* getNextTask(size_t workerIndex);
+    std::shared_ptr<Task> getNextTask(size_t workerIndex);
 private:
     void shutdownWorker(Worker* worker);
 
     std::vector<Worker*> mWorkers;
-    std::queue<Task*> mWaitingTasks;
+    std::queue<std::shared_ptr<Task>> mWaitingTasks;
     std::mutex mTaskMutex;
     std::condition_variable mTaskSignal;
     std::mutex mWorkerCompleteMutex;

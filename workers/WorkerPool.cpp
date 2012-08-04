@@ -1,5 +1,6 @@
 #include "workers/WorkerPool.h"
 #include "workers/Worker.h"
+#include "workers/Task.h"
 
 namespace quicktcp {
 namespace workers {
@@ -48,14 +49,14 @@ void WorkerPool::shutdown()
     } );
 }
 
-Task* WorkerPool::getNextTask(size_t index)
+std::shared_ptr<Task> WorkerPool::getNextTask(size_t index)
 {    
     std::unique_lock<std::mutex> lock(mTaskMutex);
     while(!mShuttingDown && mWaitingTasks.empty())
     {
         mTaskSignal.wait(lock);
     }
-    Task* task = nullptr;
+    std::shared_ptr<Task> task(nullptr);
     if(!mShuttingDown)
     {
         task = mWaitingTasks.front();
@@ -64,7 +65,7 @@ Task* WorkerPool::getNextTask(size_t index)
     return task;
 }
 
-void WorkerPool::addWork(Task* work) 
+void WorkerPool::addWork(std::shared_ptr<Task> work) 
 {
     std::lock_guard<std::mutex> lock(mTaskMutex);
     mWaitingTasks.push(work);

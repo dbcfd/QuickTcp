@@ -30,7 +30,7 @@ void Worker::threadEntryPoint(GetTaskFunction gtFunc, WorkCompleteFunction wcFun
     mStartupSignal.notify_all();
     while(mRunning)
     {
-        Task* task = gtFunc(index);
+        std::shared_ptr<Task> task = gtFunc(index);
         if(nullptr != task) task->perform();
         wcFunc(index);
     }
