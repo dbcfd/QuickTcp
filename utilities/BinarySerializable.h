@@ -11,25 +11,18 @@ class ByteStream;
 
 class UTILITIES_API BinarySerializer {
 public:
-    BinarySerializer(FILE* file) : mFile(file), mSize(0)
+    BinarySerializer(FILE* file) : mFile(file)
     {
-        if(nullptr != file)
-        {
-            long fpos = ftell(file);
-            fseek(file, 0, SEEK_END);
-            mSize = ftell(file);
-            fseek(file, fpos, SEEK_SET);
-        }
+
     }
-    BinarySerializer() : mFile(nullptr), mSize(0)
+    BinarySerializer() : mFile(nullptr)
     {
 
     }
 
-    void setFile(FILE* file, long fileSize)
+    void setFile(FILE* file)
     {
         mFile = file;
-        mSize = fileSize;
     }
 
     void writeString(const std::string& str)
@@ -95,11 +88,9 @@ public:
 	{
         if(nullptr != mFile)
         {
-		    long filePos = ftell(mFile);
-		    size_t sizeRequired = size*count;
-		    if((size_t)(mSize - filePos) < sizeRequired)
-		    {
-			    throw(std::runtime_error("BinarySerializable: Not enough data remaining for read"));
+            if(feof(mFile) != 0)
+            {
+		        throw(std::runtime_error("BinarySerializable: End of file reached"));
 		    }
 		    if(count != fread(&obj, size, count, mFile))
 		    {
@@ -109,7 +100,6 @@ public:
 	}
 private:
     FILE* mFile;
-    long mSize;
 };
 
 class UTILITIES_API BinarySerializable {
@@ -131,7 +121,6 @@ protected:
 private:
     BinarySerializer mSerializer;
 	FILE* mFile;
-	long mSize;
 };
 
 }

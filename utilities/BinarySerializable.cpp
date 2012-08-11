@@ -4,7 +4,7 @@
 namespace quicktcp {
 namespace utilities {
 
-BinarySerializable::BinarySerializable() : mFile(nullptr), mSize(0)
+BinarySerializable::BinarySerializable() : mFile(nullptr)
 {
 
 }
@@ -23,16 +23,23 @@ void BinarySerializable::fromByteStream(const ByteStream& byteStream)
 	{
 		fclose(mFile);
 		mFile = nullptr;
-		mSize = 0;
 	}
 	if(0 == tmpfile_s(&mFile))
 	{
-        mSerializer.setFile(mFile, 0);
+        mSerializer.setFile(mFile);
 		mSerializer.writeT<char>(byteStream.getBuffer(), byteStream.getSize());
-		mSize = ftell(mFile);
 		rewind(mFile);
-        mSerializer.setFile(mFile, mSize);
         readFromStream(mSerializer);
+        if(0 != feof(mFile))
+        {
+            throw(std::runtime_error("BinarySerializer: Attempted to read past end of file"));
+        }
+        size_t filePos = ftell(mFile);
+        fseek(mFile, 0, SEEK_END);
+        if(filePos != ftell(mFile))
+        {
+            throw(std::runtime_error("BinarySerializer: Failed to read all of stream"));
+        }
 	}
 	else
 	{
@@ -45,16 +52,23 @@ void BinarySerializable::fromBinaryStream(FILE* binaryStream)
 	if(nullptr != mFile)
 	{
 		fclose(mFile);
-		mSize = 0;
 	}
 	mFile = binaryStream;
 	if(nullptr != mFile) 
 	{
-		fseek(mFile, 0, SEEK_END);
-		mSize = ftell(mFile);
 		rewind(mFile);
-        mSerializer.setFile(mFile, mSize);
+        mSerializer.setFile(mFile);
         readFromStream(mSerializer);
+        if(0 != feof(mFile))
+        {
+            throw(std::runtime_error("BinarySerializable: Attempted to read past end of file"));
+        }
+        size_t filePos = ftell(mFile);
+        fseek(mFile, 0, SEEK_END);
+        if(filePos != ftell(mFile))
+        {
+            throw(std::runtime_error("BinarySerializable: Failed to read to end of file"));
+        }
 	}
 }
 
@@ -62,18 +76,10 @@ void BinarySerializable::fillStream()
 {
 	if(nullptr == mFile)
 	{
-		mSize = 0;
 		if(0 == tmpfile_s(&mFile))
 		{
-            mSerializer.setFile(mFile, 0);
-			try {
-                writeToStream(mSerializer);
-			}
-			catch(std::runtime_error)
-			{
-				//failed to write
-			}
-			mSize = ftell(mFile);
+            mSerializer.setFile(mFile);
+			writeToStream(mSerializer);
 		}
 	}
 }
@@ -84,17 +90,12 @@ ByteStream BinarySerializable::toByteStream()
 	std::vector<char> vec;
 	if(nullptr != mFile)
 	{
-		rewind(mFile);
-		vec.resize(mSize, 0);
-        mSerializer.setFile(mFile, mSize);
-		try
-		{
-			mSerializer.readT<char>(&(vec[0]), mSize);
-		}
-		catch(std::runtime_error)
-		{
-			//empty byte stream
-		}
+		fseek(mFile, 0, SEEK_END);
+        size_t size = ftell(mFile);
+		vec.resize(size, 0);
+        rewind(mFile);
+        mSerializer.setFile(mFile);
+		mSerializer.readT<char>(&(vec[0]), size);
 	}
 	return ByteStream(vec);
 }
@@ -102,6 +103,7 @@ ByteStream BinarySerializable::toByteStream()
 FILE* BinarySerializable::toBinaryStream()
 {
 	fillStream();
+    rewind(mFile);
 	return mFile;
 }
 

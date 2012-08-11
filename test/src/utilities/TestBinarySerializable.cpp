@@ -117,6 +117,7 @@ TEST_F(BinarySerializableTest, READ)
 		//test a read directly from file
 		MyObj testObj;
 		ASSERT_NO_THROW(testObj.fromBinaryStream(file));
+
 		EXPECT_EQ(intVal, testObj.mInt);
 		EXPECT_EQ(doubleVal, testObj.mDouble);
 		EXPECT_STREQ(stringVal, testObj.mString.c_str());
@@ -151,6 +152,7 @@ TEST_F(BinarySerializableTest, WRITE)
 
 	FILE* testFile = nullptr;
 	ASSERT_NO_THROW(testFile = testObj.toBinaryStream());
+    fseek(testFile, 0, SEEK_END);
 	size_t testFileSize = ftell(testFile);
 	ASSERT_EQ(fileSize, testFileSize);
 	rewind(testFile);
@@ -185,4 +187,57 @@ TEST_F(BinarySerializableTest, WRITE)
 	{
 		EXPECT_EQ(byteStream[i], testByteStream.getData()[i]);
 	}
+}
+
+TEST_F(BinarySerializableTest, BAD_READ)
+{
+    {
+        FILE* file = nullptr;
+        tmpfile_s(&file);
+
+        fwrite(&intVal, sizeof(int), 1, file);
+	    fwrite(&doubleVal, sizeof(double), 1, file);
+        fwrite(&doubleVal, sizeof(double), 1, file);
+	    fwrite(&stringSize, sizeof(size_t), 1, file);
+	    fwrite(&stringVal[0], sizeof(char), stringSize, file);
+	    fwrite(&floatSize, sizeof(size_t), 1, file);
+	    fwrite(&floatVal[0], sizeof(float), floatSize, file);
+
+        MyObj testObj;
+        EXPECT_THROW(testObj.fromBinaryStream(file), std::runtime_error);
+    }
+
+    {
+        FILE* file = nullptr;
+        tmpfile_s(&file);
+
+        size_t badStringSize = stringSize - 2;
+
+        fwrite(&intVal, sizeof(int), 1, file);
+        fwrite(&doubleVal, sizeof(double), 1, file);
+        fwrite(&badStringSize, sizeof(size_t), 1, file);
+	    fwrite(&stringVal[0], sizeof(char), stringSize, file);
+	    fwrite(&floatSize, sizeof(size_t), 1, file);
+	    fwrite(&floatVal[0], sizeof(float), floatSize, file);
+
+        MyObj testObj;
+        EXPECT_THROW(testObj.fromBinaryStream(file), std::runtime_error);
+    }
+
+    {
+        FILE* file = nullptr;
+        tmpfile_s(&file);
+
+        fwrite(&intVal, sizeof(int), 1, file);
+	    fwrite(&doubleVal, sizeof(double), 1, file);
+	    fwrite(&stringSize, sizeof(size_t), 1, file);
+	    fwrite(&stringVal[0], sizeof(char), stringSize, file);
+	    fwrite(&floatSize, sizeof(size_t), 1, file);
+	    fwrite(&floatVal[0], sizeof(float), floatSize, file);
+        fwrite(&doubleVal, sizeof(double), 1, file);
+
+        MyObj testObj;
+        EXPECT_THROW(testObj.fromBinaryStream(file), std::runtime_error);
+    }
+
 }
