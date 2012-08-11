@@ -39,7 +39,11 @@ public:
 	{
 		size_t len = 0;
 		readT<size_t>(len);
-		if(0 != len)
+        if(std::string::npos == len)
+        {
+            throw(std::runtime_error("BinarySerializable: Bad length for string"));
+        }
+        if(0 != len)
 		{
 			str.resize(len, 0);
 			readT<char>(str[0], sizeof(char), len);
@@ -96,6 +100,10 @@ public:
 		    {
 			    throw(std::runtime_error("BinarySerializable: Read did not read enough objects"));
 		    }
+        }
+        else
+        {
+            throw(std::runtime_error("BinarySerializable: Attempt to read from null file"));
         }
 	}
 private:

@@ -205,6 +205,8 @@ TEST_F(BinarySerializableTest, BAD_READ)
 
         MyObj testObj;
         EXPECT_THROW(testObj.fromBinaryStream(file), std::runtime_error);
+
+        fclose(file);
     }
 
     {
@@ -222,6 +224,8 @@ TEST_F(BinarySerializableTest, BAD_READ)
 
         MyObj testObj;
         EXPECT_THROW(testObj.fromBinaryStream(file), std::runtime_error);
+
+        fclose(file);
     }
 
     {
@@ -238,6 +242,28 @@ TEST_F(BinarySerializableTest, BAD_READ)
 
         MyObj testObj;
         EXPECT_THROW(testObj.fromBinaryStream(file), std::runtime_error);
+
+        fclose(file);
+    }
+
+    {
+        FILE* file = nullptr;
+        tmpfile_s(&file);
+
+        std::string badString("crash");
+
+        fwrite(&intVal, sizeof(int), 1, file);
+	    fwrite(&doubleVal, sizeof(double), 1, file);
+	    fwrite(&stringSize, sizeof(size_t), 1, file);
+        fwrite(&badString[0], sizeof(char), stringSize, file);
+	    fwrite(&floatSize, sizeof(size_t), 1, file);
+	    fwrite(&floatVal[0], sizeof(float), floatSize, file);
+        fwrite(&doubleVal, sizeof(double), 1, file);
+
+        MyObj testObj;
+        EXPECT_THROW(testObj.fromBinaryStream(file), std::runtime_error);
+
+        fclose(file);
     }
 
 }
