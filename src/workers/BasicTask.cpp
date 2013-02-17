@@ -1,6 +1,6 @@
-#include "Workers/BasicTask.h"
+#include "workers/BasicTask.h"
 
-namespace markit {
+namespace quicktcp {
 namespace workers {
 
 //------------------------------------------------------------------------------
@@ -16,7 +16,7 @@ BasicTask::~BasicTask()
 }
 
 //------------------------------------------------------------------------------
-void BasicTask::PerformSpecific()
+void BasicTask::performSpecific()
 {
     mFunctionToRun();
 }

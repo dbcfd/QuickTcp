@@ -1,5 +1,5 @@
 #pragma once
-#include "Workers/Platform.h"
+#include "workers/Platform.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -8,7 +8,7 @@
 #include <queue>
 #include <thread>
 
-namespace markit {
+namespace quicktcp {
 namespace workers {
 
 class Task;
@@ -19,14 +19,13 @@ public:
     Manager(const size_t nbWorkers);
     ~Manager();
 
-    void Run(std::shared_ptr<Task> task);
-    void Shutdown();
-    void WaitForTasksToComplete();
+    void run(std::shared_ptr<Task> task);
+    void shutdown();
+    void waitForTasksToComplete();
 
-    inline const bool IsShutdown();
+    inline const bool isRunning();
 protected:
-    void WorkerDone(Worker* worker);
-    void Run();
+    void run();
 
     size_t mNbWorkers;
     std::queue< Worker* > mWorkers;
@@ -36,14 +35,14 @@ protected:
 
     std::queue< std::shared_ptr<Task> > mTasks;
 
-    std::atomic<bool> mShutdown;
+    std::atomic<bool> mRunning;
 };
 
 //inline implementations
 //------------------------------------------------------------------------------
-const bool Manager::IsShutdown()
+const bool Manager::isRunning()
 {
-    return mShutdown;
+    return mRunning;
 }
 
 }

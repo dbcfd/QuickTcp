@@ -1,17 +1,43 @@
-#include "Workers/Manager.h"
-#include "Workers/Worker.h"
-#include "Workers/Task.h"
+#include "workers/Manager.h"
+#include "workers/Worker.h"
+#include "workers/Task.h"
 
 #include <functional>
 
-namespace markit {
+namespace quicktcp {
 namespace workers {
 
 //------------------------------------------------------------------------------
-Manager::Manager(const size_t nbWorkers) : mShutdown(false), mNbWorkers(nbWorkers)
+Manager::Manager(const size_t nbWorkers) : mRunning(true), mNbWorkers(nbWorkers)
 {
     auto workerDoneFunction = [this](Worker* worker) -> void {
-        this->WorkerDone(worker);
+        //grab the next task if available, otherwise add our worker to a wait list
+        if(isRunning())
+        {
+            std::shared_ptr<Task> task;
+            {
+                std::unique_lock<std::mutex> lock(mMutex);
+
+                if(mTasks.empty())
+                {
+                    mWorkers.push(worker);
+                }
+                else
+                {
+                    //task available, run it
+                    task.swap(mTasks.front());
+                    mTasks.pop();
+                }
+            }
+            if(nullptr != task)
+            {
+                worker->runTask(task);
+            }
+            else
+            {
+                mWorkerFinishedSignal.notify_one();
+            }
+        }
     };
 
     std::vector<Worker*> workers;
@@ -23,7 +49,7 @@ Manager::Manager(const size_t nbWorkers) : mShutdown(false), mNbWorkers(nbWorker
 
     for(Worker* worker : workers)
     {
-        worker->WaitUntilReady();
+        worker->waitUntilReady();
         mWorkers.push(std::move(worker));
     }
 }
@@ -31,15 +57,15 @@ Manager::Manager(const size_t nbWorkers) : mShutdown(false), mNbWorkers(nbWorker
 //------------------------------------------------------------------------------
 Manager::~Manager()
 {
-    Shutdown();
+    shutdown();
 }
 
 //------------------------------------------------------------------------------
-void Manager::Shutdown()
+void Manager::shutdown()
 {
-    bool wasShutdown = !(mShutdown.exchange(true));
+    bool wasRunning = !(mRunning.exchange(false));
 
-    if(wasShutdown)
+    if(wasRunning)
     {
         std::queue< std::shared_ptr<Task> > tasks;
         {
@@ -59,7 +85,7 @@ void Manager::Shutdown()
 
         while(!tasks.empty())
         {
-            Run(tasks.front());
+            run(tasks.front());
             tasks.pop();
         }
 
@@ -67,46 +93,14 @@ void Manager::Shutdown()
         {
             Worker* worker = mWorkers.front();
             mWorkers.pop();
-            worker->Shutdown();
+            worker->shutdown();
             delete worker;
         }
     }
 }
 
 //------------------------------------------------------------------------------
-void Manager::WorkerDone(Worker* worker)
-{
-    //grab the next task if available, otherwise add our worker to a wait list
-    if(!IsShutdown())
-    {
-        std::shared_ptr<Task> task;
-        {
-            std::unique_lock<std::mutex> lock(mMutex);
-
-            if(mTasks.empty())
-            {
-                mWorkers.push(worker);
-            }
-            else
-            {
-                //task available, run it
-                task.swap(mTasks.front());
-                mTasks.pop();
-            }
-        }
-        if(nullptr != task)
-        {
-            worker->RunTask(task);
-        }
-        else
-        {
-            mWorkerFinishedSignal.notify_one();
-        }
-    }
-}
-
-//------------------------------------------------------------------------------
-void Manager::WaitForTasksToComplete()
+void Manager::waitForTasksToComplete()
 {
     std::unique_lock<std::mutex> lock(mMutex);
 
@@ -116,10 +110,10 @@ void Manager::WaitForTasksToComplete()
 }
 
 //------------------------------------------------------------------------------
-void Manager::Run(std::shared_ptr<Task> task)
+void Manager::run(std::shared_ptr<Task> task)
 {
     //we want to run this task in a worker if one is available, else, add it to a queue
-    if(!IsShutdown())
+    if(isRunning())
     {
         Worker* worker = nullptr;
         {
@@ -138,12 +132,12 @@ void Manager::Run(std::shared_ptr<Task> task)
         }
         if(nullptr != worker)
         {
-            worker->RunTask(task);
+            worker->runTask(task);
         }
     }
     else if(task != nullptr)
     {
-        task->FailToPerform();
+        task->failToPerform();
     }
 }
 

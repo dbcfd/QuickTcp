@@ -1,10 +1,10 @@
 #pragma once
-#include "Workers/Platform.h"
-#include "Workers/Task.h"
+#include "workers/Platform.h"
+#include "workers/Task.h"
 
 #include <functional>
 
-namespace markit {
+namespace quicktcp {
 namespace workers {
 
 class WORKERS_API BasicTask : public Task {
@@ -13,7 +13,7 @@ public:
     virtual ~BasicTask();
 
 protected:
-    virtual void PerformSpecific();
+    virtual void performSpecific();
 
 private:
     std::function<void(void)> mFunctionToRun;

@@ -1,17 +1,12 @@
-#include "Workers/Manager.h"
-#include "Workers/Worker.h"
-#include "Workers/Task.h"
+#include "workers/Manager.h"
+#include "workers/Worker.h"
+#include "workers/Task.h"
 
 #pragma warning(disable:4251)
 #include <gtest/gtest.h>
 
 #include<thread>
-using namespace markit::workers;
-
-void dummyFunc()
-{
-
-}
+using namespace quicktcp::workers;
 
 class TestTask : public Task
 {
@@ -29,7 +24,7 @@ public:
     bool wasPerformed;
 
 private:
-    virtual void PerformSpecific()
+    virtual void performSpecific()
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
         wasPerformed = true;
@@ -44,9 +39,9 @@ TEST(WORKERS_TEST, TEST_TASK)
 
         ASSERT_FALSE(task.wasPerformed);
 
-        std::future<bool> future = task.GetCompletionFuture();
+        std::future<bool> future = task.getCompletionFuture();
 
-        task.Perform(&dummyFunc);
+        task.perform([](){});
 
         future.wait();
 
@@ -59,7 +54,7 @@ TEST(WORKERS_TEST, TEST_TASK)
 
         ASSERT_FALSE(task->wasPerformed);
 
-        std::future<bool> future = task->GetCompletionFuture();
+        std::future<bool> future = task->getCompletionFuture();
 
         delete task;
 
@@ -83,7 +78,7 @@ public:
     }
 
 private:
-    virtual void PerformSpecific()
+    virtual void performSpecific()
     {
         throw(std::runtime_error("Task threw an error"));
     }
@@ -95,9 +90,9 @@ TEST(WORKERS_TEST, TEST_EXCEPTION_TASK)
     {
         TestExceptionTask task;
 
-        std::future<bool> future = task.GetCompletionFuture();
+        std::future<bool> future = task.getCompletionFuture();
 
-        task.Perform(&dummyFunc);
+        task.perform([](){});
 
         future.wait();
 
@@ -128,12 +123,12 @@ TEST(WORKERS_TEST, TEST_WORKER)
         WorkerComplete workerComplete;
         auto completeFunction = [&workerComplete](Worker* worker) -> void { workerComplete.complete(); };
         Worker worker(completeFunction);
-        worker.WaitUntilReady();
+        worker.waitUntilReady();
 
         //setup and run task
         std::shared_ptr<Task> task1(new TestTask());
-        worker.RunTask(task1);
-        std::future<bool> task1Future = task1->GetCompletionFuture();
+        worker.runTask(task1);
+        std::future<bool> task1Future = task1->getCompletionFuture();
         task1Future.wait();
 
         //check that task was run
@@ -148,13 +143,13 @@ TEST(WORKERS_TEST, TEST_WORKER)
         WorkerComplete workerComplete;
         auto completeFunction = [&workerComplete](Worker* worker) -> void { workerComplete.complete(); };
         Worker worker(completeFunction);
-        worker.WaitUntilReady();
+        worker.waitUntilReady();
 
         //shutdown worker at same time as running task
         std::shared_ptr<Task> task1(new TestTask());
-        worker.RunTask(task1);
-        worker.Shutdown();
-        std::future<bool> task1Future = task1->GetCompletionFuture();
+        worker.runTask(task1);
+        worker.shutdown();
+        std::future<bool> task1Future = task1->getCompletionFuture();
         task1Future.wait();
 
         //task may or may not be run, dependend on when wakeup occurs compared to shutdown
@@ -166,13 +161,13 @@ TEST(WORKERS_TEST, TEST_WORKER)
         WorkerComplete workerComplete;
         auto completeFunction = [&workerComplete](Worker* worker) -> void { workerComplete.complete(); };
         Worker worker(completeFunction);
-        worker.WaitUntilReady();
+        worker.waitUntilReady();
 
         //shutdown worker before running task
         std::shared_ptr<Task> task1(new TestTask());
-        worker.Shutdown();
-        worker.RunTask(task1);
-        std::future<bool> task1Future = task1->GetCompletionFuture();
+        worker.shutdown();
+        worker.runTask(task1);
+        std::future<bool> task1Future = task1->getCompletionFuture();
         task1Future.wait();
 
         //we will fail to run task, which means worker will fail to look for another task
@@ -197,14 +192,14 @@ TEST(WORKERS_TEST, MANAGER_TEST)
 
         for(std::vector< std::shared_ptr<Task> >::const_iterator task = tasks.begin(); task != tasks.end(); ++task)
         {
-            manager.Run((*task));
+            manager.run((*task));
         }
 
         bool tasksCompleted = true;
 
         for(std::vector< std::shared_ptr<Task> >::const_iterator task = tasks.begin(); task != tasks.end(); ++task)
         {
-            std::future<bool> taskFuture = (*task)->GetCompletionFuture();
+            std::future<bool> taskFuture = (*task)->getCompletionFuture();
 
             taskFuture.wait();
 
@@ -231,48 +226,48 @@ TEST(WORKERS_TEST, MANAGER_TEST)
         bool tasksCompleted = true;
 
         //run some tasks
-        manager.Run(tasks[0]);
-        manager.Run(tasks[1]);
-        manager.Run(tasks[2]);
-        manager.Run(tasks[3]);
+        manager.run(tasks[0]);
+        manager.run(tasks[1]);
+        manager.run(tasks[2]);
+        manager.run(tasks[3]);
 
         {
-            std::future<bool> taskFuture = tasks[0]->GetCompletionFuture();
+            std::future<bool> taskFuture = tasks[0]->getCompletionFuture();
             taskFuture.wait();
             tasksCompleted &= taskFuture.get();
         }
 
         //run some more
-        manager.Run(tasks[4]);
-        manager.Run(tasks[5]);
-        manager.Run(tasks[6]);
-        manager.Run(tasks[7]);
-        manager.Run(tasks[8]);
+        manager.run(tasks[4]);
+        manager.run(tasks[5]);
+        manager.run(tasks[6]);
+        manager.run(tasks[7]);
+        manager.run(tasks[8]);
         {
-            std::future<bool> taskFuture = tasks[3]->GetCompletionFuture();
+            std::future<bool> taskFuture = tasks[3]->getCompletionFuture();
             taskFuture.wait();
             tasksCompleted &= taskFuture.get();
         }
 
-        manager.WaitForTasksToComplete();
+        manager.waitForTasksToComplete();
 
         int tasksToCheck[] = {1,2,4,5,6,7,8};
 
         for(size_t i = 0; i < 7; ++i)
         {
-            std::future<bool> taskFuture = tasks[tasksToCheck[i]]->GetCompletionFuture();
+            std::future<bool> taskFuture = tasks[tasksToCheck[i]]->getCompletionFuture();
             taskFuture.wait();
             tasksCompleted &= taskFuture.get();
         }
 
         ASSERT_TRUE(tasksCompleted);
 
-        manager.Shutdown();
+        manager.shutdown();
 
-        manager.Run(tasks[9]);
+        manager.run(tasks[9]);
 
         {
-            std::future<bool> taskFuture = tasks[9]->GetCompletionFuture();
+            std::future<bool> taskFuture = tasks[9]->getCompletionFuture();
             taskFuture.wait();
             ASSERT_FALSE(taskFuture.get());
         }

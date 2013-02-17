@@ -1,24 +1,24 @@
-#include "Workers/Worker.h"
-#include "Workers/Task.h"
+#include "workers/Worker.h"
+#include "workers/Task.h"
 
-namespace markit {
+namespace quicktcp {
 namespace workers {
 
 //------------------------------------------------------------------------------
 Worker::Worker(std::function<void (Worker*)> taskCompleteFunction) : mRunning(true), mTaskCompleteFunction(taskCompleteFunction)
 {
     mReadyForWorkFuture = mReadyForWorkPromise.get_future();
-    mThread = std::unique_ptr<std::thread>(new std::thread(&Worker::Run, this));
+    mThread = std::unique_ptr<std::thread>(new std::thread(&Worker::run, this));
 }
 
 //------------------------------------------------------------------------------
 Worker::~Worker()
 {
-    Shutdown();
+    shutdown();
 }
 
 //------------------------------------------------------------------------------
-void Worker::Shutdown()
+void Worker::shutdown()
 {
     bool wasRunning = mRunning.exchange(false);
     
@@ -34,15 +34,15 @@ void Worker::Shutdown()
         if(nullptr != task)
         {
             mTaskCompleteFunction(this);
-            task->FailToPerform();
+            task->failToPerform();
         }
     }
 }
 
 //------------------------------------------------------------------------------
-void Worker::RunTask(std::shared_ptr<Task> task)
+void Worker::runTask(std::shared_ptr<Task> task)
 {
-    if(IsRunning())
+    if(isRunning())
     {
         {
             std::unique_lock<std::mutex> lock(mTaskMutex);
@@ -53,23 +53,23 @@ void Worker::RunTask(std::shared_ptr<Task> task)
     }
     else if(nullptr != task)
     {
-        task->FailToPerform();
+        task->failToPerform();
     }
 }
 
 //------------------------------------------------------------------------------
-void Worker::Run()
+void Worker::run()
 {
     mReadyForWorkPromise.set_value(true);
 
-    while(IsRunning())
+    while(isRunning())
     {
         std::shared_ptr<Task> taskToRun;
         {
             std::unique_lock<std::mutex> lock(mTaskMutex);
 
             mTaskSignal.wait(lock, [this]()->bool {
-                return (nullptr != mTaskToRun) || !IsRunning();
+                return (nullptr != mTaskToRun) || !isRunning();
             } );
 
             taskToRun.swap(mTaskToRun);
@@ -77,7 +77,7 @@ void Worker::Run()
 
         if(nullptr != taskToRun)
         {
-            taskToRun->Perform([this]()->void {
+            taskToRun->perform([this]()->void {
                 mTaskCompleteFunction(this);
             } );
         }

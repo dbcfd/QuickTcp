@@ -1,8 +1,6 @@
-#include "Workers/Task.h"
+#include "workers/Task.h"
 
-#include <iostream>
-
-namespace markit {
+namespace quicktcp {
 namespace workers {
 
 //------------------------------------------------------------------------------
@@ -16,7 +14,7 @@ Task::~Task()
 {
     try {
         //attempt to fail the task, which sets the future to false
-        FailToPerform();
+        failToPerform();
     }
     catch(std::future_error&)
     {
@@ -25,23 +23,23 @@ Task::~Task()
 }
 
 //------------------------------------------------------------------------------
-void Task::FailToPerform()
+void Task::failToPerform()
 {
     mTaskCompletePromise.set_value(false);
 }
 
 //------------------------------------------------------------------------------
-void Task::Perform(std::function<void(void)> completeFunction)
+void Task::perform(std::function<void(void)> completeFunction)
 {
     bool successful = false;
     try 
     {
-        PerformSpecific();
+        performSpecific();
         successful = true;
     }
-    catch(std::runtime_error& err)
+    catch(std::runtime_error&)
     {
-        std::cerr << "Task failure: " << err.what() << std::endl;
+        
     }
 
     completeFunction();

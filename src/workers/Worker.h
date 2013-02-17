@@ -1,5 +1,5 @@
 #pragma once
-#include "Workers/Platform.h"
+#include "workers/Platform.h"
 
 #include <atomic>
 #include <condition_variable>
@@ -7,7 +7,7 @@
 #include <future>
 #include <thread>
 
-namespace markit {
+namespace quicktcp {
 namespace workers {
 
 class Task;
@@ -17,13 +17,13 @@ public:
     Worker(std::function<void (Worker*)> taskCompleteFunction);
     virtual ~Worker();
 
-    void RunTask(std::shared_ptr<Task> task);
-    void Shutdown();
+    void runTask(std::shared_ptr<Task> task);
+    void shutdown();
 
-    inline void WaitUntilReady();
-    inline const bool IsRunning();
+    inline void waitUntilReady();
+    inline const bool isRunning();
 private:
-    void Run();
+    void run();
 
     std::unique_ptr<std::thread> mThread;
     std::promise<bool> mReadyForWorkPromise;
@@ -37,13 +37,13 @@ private:
 
 //inline implementations
 //------------------------------------------------------------------------------
-void Worker::WaitUntilReady()
+void Worker::waitUntilReady()
 {
      mReadyForWorkFuture.wait();
 }
 
 //------------------------------------------------------------------------------
-const bool Worker::IsRunning()
+const bool Worker::isRunning()
 {
     return mRunning;
 }
