@@ -1,36 +1,72 @@
 #pragma once
 
-#include "client/interface/Platform.h"
+#include "client/Platform.h"
+#include "client/ServerInfo.h"
 
-#include <functional>
+#include <future>
+#include <memory>
 
-namespace c11http {
+namespace quicktcp {
 
-namespace objects {
-class HttpRequest;
-class HttpResponse;
+namespace utilities {
+class ByteStream;
+}
+
+namespace workers {
+class Manager;
 }
 
 namespace client {
-
-class CLIENT_INTERFACE_API IClient {
+class CLIENT_API IClient {
 public:
-   typedef std::function<void(const objects::HttpResponse&)> ClientResponseCallback;
+    class CLIENT_API SendResult
+    {
+    public:
+        SendResult();
+        SendResult(const std::string& err);
 
-   IClient(const ClientResponseCallback& callback);
+        inline void check() const;
 
-   virtual objects::HttpResponse sendRequestToServer(const objects::HttpRequest& req) = 0;
-   virtual void connectToServer(const std::string& ip, const unsigned int port) = 0;
-   virtual void disconnect() = 0;
+    private:
+        std::string mError;
+    };
 
-   void receiveResponseFromServer(const objects::HttpResponse& resp);
-   void connectToServer(const std::string& ip, const unsigned int port);
+    IClient(std::shared_ptr<workers::Manager> manager, 
+        const ServerInfo& info, 
+        std::function<void(std::shared_ptr<utilities::ByteStream>)> onReceive);
+
+    std::future<SendResult> send(std::shared_ptr<utilities::ByteStream> stream);
+
+    virtual void disconnect() = 0;
+
+    inline std::shared_ptr<workers::Manager> manager() const;
+
 protected:
-   virtual void performServerConnection(const std::string& ip, const unsigned int port) = 0;
+    void receive(std::shared_ptr<utilities::ByteStream> stream) const;
+
+    virtual void performSend(std::shared_ptr<std::promise<SendResult>> responsePromise, std::shared_ptr<utilities::ByteStream> stream) = 0;
 
 private:
-   ClientResponseCallback mCallback;
+   std::shared_ptr<workers::Manager> mManager;
+   std::function<void(std::shared_ptr<utilities::ByteStream>)> mOnReceive;
+   ServerInfo mInfo;
 };
+
+//inline implementations
+//------------------------------------------------------------------------------
+void IClient::SendResult::check() const
+{
+    if(!mError.empty())
+    {
+        throw(std::runtime_error(mError));
+    }
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<workers::Manager> IClient::manager() const
+{
+    return mManager;
+}
 
 }
 }
