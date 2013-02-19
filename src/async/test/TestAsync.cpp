@@ -107,7 +107,7 @@ TEST(ASYNC_TEST, PARALLEL_TIMING)
     for(size_t idx = 1; idx < 5; ++idx)
     {
         auto curMillis = std::chrono::duration_cast<std::chrono::milliseconds>(durations[idx]).count();
-        ASSERT_TRUE(abs(millis - curMillis) < 1);
+        ASSERT_GE(1, abs(millis - curMillis));
         maxMillis = std::max(curMillis, maxMillis);
     }
 
@@ -115,6 +115,51 @@ TEST(ASYNC_TEST, PARALLEL_TIMING)
 }
 
 TEST(ASYNC_TEST, SERIES)
+{
+    std::shared_ptr<workers::Manager> manager(new workers::Manager(5));
+    std::atomic<size_t> runCount(1);
+    std::vector<size_t> runOrder(6, 0);
+
+    std::function<async::PtrAsyncResult(async::PtrAsyncResult)> opsArray[] = {
+        [&runOrder, &runCount](async::PtrAsyncResult res)->async::PtrAsyncResult {
+            runOrder[0] = runCount.fetch_add(1);
+            return res;
+        },
+        [&runOrder, &runCount](async::PtrAsyncResult res)->async::PtrAsyncResult {
+            runOrder[1] = runCount.fetch_add(1);
+            return res;
+        },
+        [&runOrder, &runCount](async::PtrAsyncResult res)->async::PtrAsyncResult {
+            runOrder[2] = runCount.fetch_add(1);
+            return res;
+        },
+        [&runOrder, &runCount](async::PtrAsyncResult res)->async::PtrAsyncResult {
+            runOrder[3] = runCount.fetch_add(1);
+            return res;
+        },
+        [&runOrder, &runCount](async::PtrAsyncResult res)->async::PtrAsyncResult {
+            runOrder[4] = runCount.fetch_add(1);
+            return res;
+        }
+    };
+
+    std::future<async::PtrAsyncResult> seriesFuture = async::Series(manager, opsArray, 5).execute(
+        [&runOrder, &runCount](async::PtrAsyncResult result)->async::PtrAsyncResult {
+            runOrder[5] = runCount;
+            return result;
+        } );
+
+    async::PtrAsyncResult result = seriesFuture.get();
+
+    ASSERT_NO_THROW(result->throwIfError());
+
+    for(size_t idx = 0; idx < 6; ++idx)
+    {
+        ASSERT_EQ(idx+1, runOrder[idx]);
+    }
+}
+
+TEST(ASYNC_TEST, SERIES_TIMING)
 {
     std::shared_ptr<workers::Manager> manager(new workers::Manager(5));
     std::vector<std::unique_ptr<std::chrono::high_resolution_clock::time_point>> times(6);
@@ -136,36 +181,27 @@ TEST(ASYNC_TEST, SERIES)
 
     async::Series series(manager, opsArray, 5);
     std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
-    std::future<async::PtrAsyncResult> parallelFuture = series.execute([&times, &start](async::PtrAsyncResult result)->async::PtrAsyncResult {
+    std::future<async::PtrAsyncResult> seriesFuture = series.execute([&times, &start](async::PtrAsyncResult result)->async::PtrAsyncResult {
         times[5] = std::unique_ptr<std::chrono::high_resolution_clock::time_point>(
             new std::chrono::high_resolution_clock::time_point(std::chrono::high_resolution_clock::now())
             );
         return result;
     } );
 
-    async::PtrAsyncResult result = parallelFuture.get();
+    async::PtrAsyncResult result = seriesFuture.get();
 
     ASSERT_NO_THROW(result->throwIfError());
 
-    std::vector<std::chrono::high_resolution_clock::duration> durations;
-    durations.reserve(times.size());
-
-    for(std::unique_ptr<std::chrono::high_resolution_clock::time_point>& time : times)
-    {
-        durations.emplace_back((*time) - start);
-    }
-
-    auto lastMillis = std::chrono::duration_cast<std::chrono::milliseconds>(durations[0]).count();
-    auto totalMillis = lastMillis;
+    std::chrono::high_resolution_clock::time_point last = (*times[0]);
 
     for(size_t idx = 1; idx < 5; ++idx)
     {
-        auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(durations[idx]).count();
-        ASSERT_LE(lastMillis, millis);
-        totalMillis += millis;
+        std::chrono::high_resolution_clock::time_point current = (*times[idx]);
+        ASSERT_LE(last, current);
+        last = current;
     }
 
-    ASSERT_LE(totalMillis, std::chrono::duration_cast<std::chrono::milliseconds>(durations[5]).count());
+    ASSERT_LE(last, (*times[5]));
 }
 
 TEST(ASYNC_TEST, PARALLEL_FOREACH)
@@ -215,7 +251,7 @@ TEST(ASYNC_TEST, PARALLEL_FOREACH)
     for(size_t idx = 1; idx < 5; ++idx)
     {
         auto curMillis = std::chrono::duration_cast<std::chrono::milliseconds>(durations[idx]).count();
-        ASSERT_TRUE(abs(millis - curMillis) < 1);
+        ASSERT_GE(1, abs(millis - curMillis));
         maxMillis = std::max(curMillis, maxMillis);
     }
 

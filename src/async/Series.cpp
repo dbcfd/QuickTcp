@@ -33,7 +33,7 @@ Series::Series(std::shared_ptr<workers::Manager> manager, std::function<PtrAsync
 
         addTask(tasks[0]);
 
-        for(size_t idx = 0; idx < nbTasks; ++idx)
+        for(size_t idx = 1; idx < nbTasks; ++idx)
         {
             addTask(mTasks.back()->getFuture(), tasks[idx]);
         }

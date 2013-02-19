@@ -42,8 +42,8 @@ void Task::perform(std::function<void(void)> completeFunction)
         
     }
 
-    completeFunction();
     mTaskCompletePromise.set_value(successful);
+    completeFunction();
 }
 
 }
