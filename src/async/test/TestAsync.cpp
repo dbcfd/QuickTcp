@@ -191,7 +191,7 @@ TEST(ASYNC_TEST, PARALLEL_FOREACH)
     async::ParallelForEach parallel(manager, func, data);
     std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
     std::future<async::PtrAsyncResult> parallelFuture = parallel.execute([&times, &start](const std::vector<async::PtrAsyncResult>& results)->async::PtrAsyncResult {
-        times[6] = std::unique_ptr<std::chrono::high_resolution_clock::time_point>(
+        times[5] = std::unique_ptr<std::chrono::high_resolution_clock::time_point>(
             new std::chrono::high_resolution_clock::time_point(std::chrono::high_resolution_clock::now())
             );
         return async::PtrAsyncResult(new async::AsyncResult());

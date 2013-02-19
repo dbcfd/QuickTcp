@@ -43,6 +43,7 @@ AsyncFuture Parallel::execute(std::function<PtrAsyncResult(PtrAsyncResult)> onFi
     for(auto task : mTasks)
     {
         taskFutures->push_back(task->getFuture());
+        mManager->run(task);
     }
 
     std::shared_ptr<AsyncTask> finishTask(new AsyncTask(std::packaged_task<PtrAsyncResult(void)>(

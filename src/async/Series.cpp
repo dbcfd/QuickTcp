@@ -44,7 +44,7 @@ Series::Series(std::shared_ptr<workers::Manager> manager, std::function<PtrAsync
 void Series::addTask(std::function<PtrAsyncResult(PtrAsyncResult)> func)
 {
     std::packaged_task<PtrAsyncResult(void)> packagedTask(
-        [&func]() -> PtrAsyncResult {
+        [func]() -> PtrAsyncResult {
             return func(PtrAsyncResult(new AsyncResult()));
     } );
     mTasks.emplace_back(new AsyncTask(std::move(packagedTask)));
@@ -54,7 +54,7 @@ void Series::addTask(std::function<PtrAsyncResult(PtrAsyncResult)> func)
 void Series::addTask(std::future<PtrAsyncResult> forwardedFuture, std::function<PtrAsyncResult(PtrAsyncResult)> func)
 {
     std::packaged_task<PtrAsyncResult(PtrAsyncResult)> packagedTask(
-        [&func](PtrAsyncResult result) -> PtrAsyncResult {
+        [func](PtrAsyncResult result) -> PtrAsyncResult {
             return func(result);
     } );
     mTasks.emplace_back(new AsyncForwardTask(std::move(forwardedFuture), std::move(packagedTask)));

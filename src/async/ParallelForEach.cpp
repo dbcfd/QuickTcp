@@ -26,13 +26,13 @@ ParallelForEach::ParallelForEach(std::shared_ptr<workers::Manager> manager,
 //------------------------------------------------------------------------------
 AsyncFuture ParallelForEach::execute(std::function<PtrAsyncResult(const std::vector<PtrAsyncResult>&)> onFinishTask)
 {
-    std::shared_ptr<std::vector<AsyncFuture>> taskFutures;
+    std::shared_ptr<std::vector<AsyncFuture>> taskFutures(new std::vector<AsyncFuture>());
     taskFutures->reserve(mTasks.size());
 
     for(auto task : mTasks)
     {
-        mManager->run(task);
         taskFutures->push_back(task->getFuture());
+        mManager->run(task);
     }
 
     std::shared_ptr<AsyncTask> finishTask(new AsyncTask(std::packaged_task<PtrAsyncResult(void)>(
