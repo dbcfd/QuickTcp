@@ -1,36 +1,57 @@
-#include "server/interface/IServer.h"
-
-#include <iomanip>
-#include <sstream>
+#include "server/IServer.h"
+#include "server/IServerConnection.h"
 
 namespace quicktcp {
 namespace server {
-namespace iface {
 
-IServer::IServer(workers::WorkerPool* pool) : 
-    mWorkerPool(pool), mLastTime(std::chrono::system_clock::now()), mIdentifiersDuringTimeframe(0)
+//------------------------------------------------------------------------------
+IServer::SendComplete::SendComplete()
 {
-   
+
 }
 
-std::string IServer::generateIdentifier()
+//------------------------------------------------------------------------------
+IServer::SendComplete::SendComplete(const std::string& error) : mError(error)
 {
-    std::chrono::time_point<std::chrono::system_clock> now(std::chrono::system_clock::now());
-    if(0 != std::chrono::duration_cast<std::chrono::seconds>(now - mLastTime).count())
-    {
-        mLastTime = now;
-        mLastTimeT = std::chrono::system_clock::to_time_t(mLastTime);
-        mIdentifiersDuringTimeframe = 0;
-    }
-    std::stringstream sstr;
-    struct tm* tmptr = nullptr;
-    if(0 == localtime_s(tmptr, &mLastTimeT))
-    {
-        sstr << std::put_time(tmptr, "%F %T") << mIdentifiersDuringTimeframe;
-    }
-    return sstr.str();
-}
 
 }
+
+//------------------------------------------------------------------------------
+IServer::IServer(const ServerInfo& info, std::shared_ptr<workers::Manager> manager, std::function<std::unique_ptr<IServerConnection>()> createConnectionFunc)
+    : mInfo(info), mManager(manager), mCreateConnectionFunc(createConnectionFunc), mIsRunning(true)
+{
+    
+}
+
+//------------------------------------------------------------------------------
+void IServer::shutdown()
+{
+    bool wasRunning = mIsRunning.exchange(false);
+
+    if(wasRunning)
+    {
+        performShutdown();
+    }
+}
+
+//------------------------------------------------------------------------------
+std::future<IServer::SendComplete> IServer::send(std::shared_ptr<utilities::ByteStream> stream)
+{
+    std::unique_ptr<std::promise<SendComplete>> promise(new std::promise<SendComplete>());
+    std::future<SendComplete> future = promise->get_future();
+
+    auto func = std::bind([this, stream](std::unique_ptr<std::promise<SendComplete>> promise)->void {
+        performSend(std::move(promise), stream);
+    }, std::move(promise));
+
+    return future;
+}
+
+//------------------------------------------------------------------------------
+std::unique_ptr<IServerConnection> IServer::addConnection()
+{
+    return mCreateConnectionFunc();
+}
+
 }
 }

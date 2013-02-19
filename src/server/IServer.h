@@ -1,25 +1,25 @@
 #pragma once
 
-#include "server/interface/Platform.h"
+#include "server/Platform.h"
+#include "server/ServerInfo.h"
 
 #include <atomic>
-#include <chrono>
-#include <ctime>
 #include <functional>
+#include <future>
 #include <memory>
+#include <mutex>
 
 namespace quicktcp {
-
-namespace workers {
-class WorkerPool;
-}
 
 namespace utilities {
 class ByteStream;
 }
 
+namespace workers {
+class Manager;
+}
+
 namespace server {
-namespace iface {
 
 class IServerConnection;
 
@@ -27,45 +27,60 @@ class IServerConnection;
  * Server interface. Platform specific implementations will implement this interface, allowing
  * common access to the platform servers
  */
-class SERVER_INTERFACE_API IServer {
+class SERVER_API IServer {
 public:
-    typedef std::function<void(std::shared_ptr<IServerConnection>)> ConnectionAdded;
+    class SERVER_API SendComplete
+    {
+    public:
+        SendComplete();
+        SendComplete(const std::string& error);
 
-    IServer(workers::WorkerPool* pool);
+        inline const std::string& error() const;
 
-    virtual void waitForEvents() = 0;
-    virtual void disconnect() = 0;
+    private:
+        std::string mError;
+    };
 
-    inline bool isRunning() const;
+    IServer(const ServerInfo& info, std::shared_ptr<workers::Manager> manager, std::function<std::unique_ptr<IServerConnection>()> createConnectionFunc);
+
+    void shutdown();
+    std::future<SendComplete> send(std::shared_ptr<utilities::ByteStream> stream);
+
+    inline const bool isRunning() const;
+    inline std::shared_ptr<workers::Manager> manager() const;
+
 protected:
-    std::string generateIdentifier();
+    std::unique_ptr<IServerConnection> addConnection();
 
-    inline bool setRunning(const bool running);
-    inline workers::WorkerPool* getWorkerPool() const;
 private:
-    workers::WorkerPool* mWorkerPool;
-    std::chrono::time_point<std::chrono::system_clock> mLastTime;
-    std::time_t mLastTimeT;
-    std::atomic<bool> mRunning;
-    int mIdentifiersDuringTimeframe;
+    virtual void performShutdown() = 0;
+    virtual void performSend(std::unique_ptr<std::promise<SendComplete>> promise, std::shared_ptr<utilities::ByteStream> stream) = 0;
+
+    std::shared_ptr<workers::Manager> mManager;
+    std::function<std::unique_ptr<IServerConnection>()> mCreateConnectionFunc;
+    ServerInfo mInfo;
+
+    std::atomic<bool> mIsRunning;
 };
 
 //inline implementations
-bool IServer::isRunning() const
+//------------------------------------------------------------------------------
+const std::string& IServer::SendComplete::error() const
 {
-    return mRunning;
+    return mError;
 }
 
-bool IServer::setRunning(const bool running)
+//------------------------------------------------------------------------------
+const bool IServer::isRunning() const
 {
-    return mRunning.exchange(running);
+    return mIsRunning;
 }
 
-workers::WorkerPool* IServer::getWorkerPool() const
+//------------------------------------------------------------------------------
+std::shared_ptr<workers::Manager> IServer::manager() const
 {
-    return mWorkerPool;
+    return mManager;
 }
 
-}
 }
 }

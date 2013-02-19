@@ -1,89 +1,87 @@
 #pragma once
 
-#include "utilities/ByteStream.h"
-#include "utilities/RequestToResponse.h"
+#include "server/Platform.h"
+#include "server/IServer.h"
 
-#include "workers/Task.h"
-
-#include "server/interface/Platform.h"
-
-#include <functional>
 #include <future>
-#include <string>
+#include <memory>
 
 namespace quicktcp {
 
-namespace workers {
-class WorkerPool;
+namespace utilities {
+class ByteStream;
 }
 
 namespace server {
-namespace iface {
 
-class ReceiveTask;
-class SendTask;
+class IServer;
 
-class SERVER_INTERFACE_API IServerConnection {
+class SERVER_API IServerConnection {
 public:
-    IServerConnection(const std::string& identifier, workers::WorkerPool* pool);
-    virtual ~IServerConnection();
-
-    std::future<bool> send(const utilities::ByteStream& data);
-    void receive();
-
-    virtual void close() = 0;
-
-    inline void setReceiveHandler(utilities::RequestToResponse reqToResp);
-    inline const std::string& getIdentifier() const;
-    inline workers::WorkerPool* getWorkerPool() const;
-
-    bool operator<(const IServerConnection& other)
+    class SERVER_API Response
     {
-        return mIdentifier < other.mIdentifier;
-    }
+    public:
+        Response(std::shared_ptr<utilities::ByteStream> stream);
+        Response(const std::string& error);
 
-    inline bool connected() const;
+        inline const std::string& error() const;
+        inline std::shared_ptr<utilities::ByteStream> stream() const;
+
+    private:
+        std::shared_ptr<utilities::ByteStream> mStream;
+        std::string mError;
+    };
+
+    class SERVER_API ResponseComplete
+    {
+    public:
+        ResponseComplete(const std::string& error);
+        ResponseComplete();
+
+        inline const std::string& error() const;
+    private:
+        std::string mError;
+    };
+
+    IServerConnection(std::shared_ptr<IServer> server);
+
+    std::future<ResponseComplete> respond(std::shared_ptr<utilities::ByteStream> stream);
+
+    inline std::shared_ptr<IServer> server() const;
+
+    virtual void disconnect();
+
 protected:
-    virtual bool blockingSend(const utilities::ByteStream& data) = 0;
-    virtual utilities::ByteStream blockingReceive() = 0;
+    virtual Response determineResponse(std::shared_ptr<utilities::ByteStream> stream) = 0;
 
-    inline void disconnect();
 private:
-    std::string mIdentifier;
-    workers::WorkerPool* mWorkerPool;
-    utilities::RequestToResponse mReqToResp;
-    std::atomic<bool> mConnected;
-    
-    friend class SendTask;
-    friend class ReceiveTask;
+   std::shared_ptr<IServer> mServer;
 };
 
 //inline implementations
-const std::string& IServerConnection::getIdentifier() const
+//------------------------------------------------------------------------------
+const std::string& IServerConnection::Response::error() const
 {
-    return mIdentifier;
+    return mError;
 }
 
-workers::WorkerPool* IServerConnection::getWorkerPool() const
+//------------------------------------------------------------------------------
+std::shared_ptr<utilities::ByteStream> IServerConnection::Response::stream() const
 {
-    return mWorkerPool;
+    return mStream;
 }
 
-void IServerConnection::setReceiveHandler(utilities::RequestToResponse reqToResp)
+//------------------------------------------------------------------------------
+const std::string& IServerConnection::ResponseComplete::error() const
 {
-    mReqToResp = reqToResp;
+    return mError;
 }
 
-bool IServerConnection::connected() const
+//------------------------------------------------------------------------------
+std::shared_ptr<IServer> IServerConnection::server() const
 {
-    return mConnected;
+    return mServer;
 }
 
-void IServerConnection::disconnect()
-{
-    mConnected = false;
-}
-
-}
 }
 }

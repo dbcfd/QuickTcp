@@ -38,7 +38,7 @@ public:
     bool isConnected;
 
 protected:
-    virtual void performSend(std::shared_ptr<std::promise<SendResult>> responsePromise, std::shared_ptr<utilities::ByteStream> stream)
+    virtual void performSend(std::unique_ptr<std::promise<SendResult>> responsePromise, std::shared_ptr<utilities::ByteStream> stream)
     {
         responsePromise->set_value(SendResult());
     }

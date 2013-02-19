@@ -44,7 +44,7 @@ public:
 protected:
     void receive(std::shared_ptr<utilities::ByteStream> stream) const;
 
-    virtual void performSend(std::shared_ptr<std::promise<SendResult>> responsePromise, std::shared_ptr<utilities::ByteStream> stream) = 0;
+    virtual void performSend(std::unique_ptr<std::promise<SendResult>> responsePromise, std::shared_ptr<utilities::ByteStream> stream) = 0;
 
 private:
    std::shared_ptr<workers::Manager> mManager;

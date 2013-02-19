@@ -1,41 +1,58 @@
-#include "server/interface/IServerConnection.h"
-#include "server/interface/SendTask.h"
-#include "server/interface/ReceiveTask.h"
+#include "server/IServerConnection.h"
+#include "server/IServer.h"
 
-#include "workers/WorkerPool.h"
+#include "workers/Manager.h"
 
 namespace quicktcp {
 namespace server {
-namespace iface {
 
-IServerConnection::IServerConnection(const std::string& identifier, workers::WorkerPool* pool) 
-    : mIdentifier(identifier), mWorkerPool(pool), 
-    mReqToResp([](const utilities::ByteStream&) -> utilities::ByteStream {
-        return utilities::ByteStream();
-    } )
+//------------------------------------------------------------------------------
+IServerConnection::Response::Response(std::shared_ptr<utilities::ByteStream> stream) : mStream(stream)
 {
 
 }
 
-IServerConnection::~IServerConnection() 
+//------------------------------------------------------------------------------
+IServerConnection::Response::Response(const std::string& error) : mError(error)
 {
 
 }
 
-std::future<bool> IServerConnection::send(const utilities::ByteStream& data)
+//------------------------------------------------------------------------------
+IServerConnection::IServerConnection(std::shared_ptr<IServer> server) : mServer(server)
 {
-    SendTask* sendTask = new SendTask(this, data);
-    std::shared_ptr<workers::Task> task(sendTask);
-    mWorkerPool->addWork(task);
-    return sendTask->getResult();
-}
-
-void IServerConnection::receive()
-{
-    std::shared_ptr<workers::Task> task(new ReceiveTask(this, mReqToResp));
-    mWorkerPool->addWork(task);
-}
 
 }
+
+//------------------------------------------------------------------------------
+std::future<IServerConnection::ResponseComplete> IServerConnection::respond(std::shared_ptr<utilities::ByteStream> stream)
+{
+    std::unique_ptr<std::promise<ResponseComplete>> promise(new std::promise<ResponseComplete>());
+    std::future<ResponseComplete> future = promise->get_future();
+
+    auto func = std::bind([this, stream](std::unique_ptr<std::promise<ResponseComplete>> promise)->void {
+        Response resp = determineResponse(stream);
+        auto sendFunc = std::bind([this](std::unique_ptr<std::promise<ResponseComplete>> promise, const Response& response)->void {
+            if(!response.error().empty())
+            {
+                std::future<IServer::SendComplete> future = mServer->send(response.stream());
+                auto waitFunc = std::bind([](std::unique_ptr<std::promise<ResponseComplete>> promise, std::future<IServer::SendComplete> future)->void{
+                    future.wait();
+                    promise->set_value(future.get().error());
+                }, std::move(promise), std::move(future));
+                mServer->manager()->run(waitFunc);
+            }
+            else
+            {
+                promise->set_value(response.error());
+            }
+        }, std::move(promise), std::move(resp));
+        mServer->manager()->run(sendFunc);
+    }, std::move(promise));
+    mServer->manager()->run(func);
+
+    return future;
+}
+
 }
 }

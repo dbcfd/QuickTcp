@@ -29,11 +29,12 @@ IClient::IClient(std::shared_ptr<workers::Manager> manager,
 //------------------------------------------------------------------------------
 std::future<IClient::SendResult> IClient::send(std::shared_ptr<utilities::ByteStream> stream)
 {
-    std::shared_ptr<std::promise<SendResult>> promise(new std::promise<SendResult>());
+    std::unique_ptr<std::promise<SendResult>> promise(new std::promise<SendResult>());
+    std::future<SendResult> promise = promise->get_future();
 
-    auto func = [this, promise, stream]()-> void {
-        performSend(promise, stream);
-    };
+    auto func = std::bind([this, stream](std::unique_ptr<std::promise<SendResult>> promise)-> void {
+        performSend(std::move(promise), stream);
+    }, std::move(promise));
 
     mManager->run(func);
 
