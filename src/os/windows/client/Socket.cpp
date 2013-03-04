@@ -1,24 +1,20 @@
-#ifdef WINDOWS
-#include "tcp/windows/Socket.h"
+#include "os/windows/client/Socket.h"
 
 #include <sstream>
 
-namespace c11http {
-namespace tcp {
+namespace quicktcp {
+namespace os {
 namespace windows {
+namespace client {
 
-Socket::Socket(const SOCKET _sckt) :
-        mSocket(_sckt)
+//------------------------------------------------------------------------------
+Socket::Socket(const SOCKET _sckt) : mSocket(_sckt)
 {
 
 }
 
-SOCKET Socket::getSocket() const
-{
-    return mSocket;
-}
-
-Socket::Socket() throw(std::runtime_error)
+//------------------------------------------------------------------------------
+Socket::Socket()
 {
     mSocket = INVALID_SOCKET;
     mSocket = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, nullptr, 0, WSA_FLAG_OVERLAPPED);
@@ -53,10 +49,14 @@ Socket::Socket() throw(std::runtime_error)
         //TODO: log
     }
 }
+
+//------------------------------------------------------------------------------
 Socket::~Socket()
 {
 
 }
+
+//------------------------------------------------------------------------------
 void Socket::closeSocket()
 {
     closesocket(mSocket);
@@ -65,5 +65,4 @@ void Socket::closeSocket()
 }
 }
 }
-
-#endif
+}

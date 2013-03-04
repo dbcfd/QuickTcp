@@ -1,9 +1,9 @@
 #pragma once
-#include "Cache/Platform.h"
-#include "Cache/ByteStream.h"
+#include "Utilities/Platform.h"
+#include "Utilities/ByteStream.h"
 
-namespace markit {
-namespace cache {
+namespace quicktcp {
+namespace utilities {
 
 /**
  * Class to read and write from a binary representation, which consists of a buffer and size. When writing to binary, buffer will be
@@ -11,7 +11,7 @@ namespace cache {
  * the number of times this occurs. When reading from a buffer, the serializer can take ownership of the buffer to prevent memory leaks.
  */
 //------------------------------------------------------------------------------
-class CACHE_API BinarySerializer
+class UTILITIES_API BinarySerializer
 {
 public:
     /**
@@ -37,30 +37,30 @@ public:
     BinarySerializer(void* buffer, size_t size, const bool takeOwnershipOfBuffer);
     ~BinarySerializer();
 
-    bool WriteString(const std::string& str);
-    bool ReadString(std::string& str);
+    bool writeString(const std::string& str);
+    bool readString(std::string& str);
 
     template<class T>
-    bool WriteT(const T& obj);
+    bool writeT(const T& obj);
     template<class T>
-    bool WriteT(const T* obj, const size_t arraySize);
+    bool writeT(const T* obj, const size_t arraySize);
     template<class T>
-    bool WriteT(const T& obj, const size_t objSize, const size_t objCount);
+    bool writeT(const T& obj, const size_t objSize, const size_t objCount);
 
     template<class T>
-    bool ReadT(T& obj);
+    bool readT(T& obj);
     template<class T>
-    bool ReadT(T* obj, const size_t arraySize);
+    bool readT(T* obj, const size_t arraySize);
     template<class T>
-    bool ReadT(T& obj, const size_t objSize, const size_t objCount);
+    bool readT(T& obj, const size_t objSize, const size_t objCount);
 
-    inline void Skip(const size_t size);
-    inline bool ReadComplete() const;
-    inline const void* Buffer() const;
-    inline size_t Size() const;
-    inline size_t BytesRead() const;
-    inline void* TransferBuffer();
-    inline void ResetPosition();
+    inline void skip(const size_t size);
+    inline bool readComplete() const;
+    inline const void* buffer() const;
+    inline size_t size() const;
+    inline size_t bytesRead() const;
+    inline void* transferBuffer();
+    inline void resetPosition();
 private:
     char* mPosition;
     char* mBuffer;
@@ -71,21 +71,21 @@ private:
 //Inline implementations
 //------------------------------------------------------------------------------
 template<class T>
-bool BinarySerializer::WriteT(const T& obj)
+bool BinarySerializer::writeT(const T& obj)
 {
-    return WriteT(obj, sizeof(obj), 1);
+    return writeT(obj, sizeof(obj), 1);
 }
 
 //------------------------------------------------------------------------------
 template<class T>
-bool BinarySerializer::WriteT(const T* obj, const size_t arraySize)
+bool BinarySerializer::writeT(const T* obj, const size_t arraySize)
 {
-    return (0 != obj && WriteT(*obj, sizeof(T), arraySize));
+    return (0 != obj && writeT(*obj, sizeof(T), arraySize));
 }
 
 //------------------------------------------------------------------------------
 template<class T>
-bool BinarySerializer::WriteT(const T& obj, const size_t objSize, const size_t objCount)
+bool BinarySerializer::writeT(const T& obj, const size_t objSize, const size_t objCount)
 {
     bool ret = (0 != mBuffer);
     if(ret)
@@ -116,21 +116,21 @@ bool BinarySerializer::WriteT(const T& obj, const size_t objSize, const size_t o
 
 //------------------------------------------------------------------------------
 template<class T>
-bool BinarySerializer::ReadT(T& obj)
+bool BinarySerializer::readT(T& obj)
 {
-    return ReadT(obj, sizeof(obj), 1);
+    return readT(obj, sizeof(obj), 1);
 }
 
 //------------------------------------------------------------------------------
 template<class T>
-bool BinarySerializer::ReadT(T* obj, const size_t arraySize)
+bool BinarySerializer::readT(T* obj, const size_t arraySize)
 {
-    return (0 != obj && ReadT(*obj, sizeof(T), arraySize));
+    return (0 != obj && readT(*obj, sizeof(T), arraySize));
 }
 
 //------------------------------------------------------------------------------
 template<class T>
-bool BinarySerializer::ReadT(T& obj, const size_t objSize, const size_t objCount)
+bool BinarySerializer::readT(T& obj, const size_t objSize, const size_t objCount)
 {
     size_t sizeUtilized = mPosition - mBuffer;
     size_t sizeRequired = objSize * objCount;
@@ -144,7 +144,7 @@ bool BinarySerializer::ReadT(T& obj, const size_t objSize, const size_t objCount
 }
 
 //------------------------------------------------------------------------------
-void BinarySerializer::Skip(const size_t count)
+void BinarySerializer::skip(const size_t count)
 {
     size_t sizeRead = mPosition - mBuffer;
     size_t maxSkip = std::min(mSize - sizeRead, count);
@@ -152,31 +152,31 @@ void BinarySerializer::Skip(const size_t count)
 }
 
 //------------------------------------------------------------------------------
-bool BinarySerializer::ReadComplete() const
+bool BinarySerializer::readComplete() const
 {
     return (mBuffer + mSize == mPosition);
 }
 
 //------------------------------------------------------------------------------
-const void* BinarySerializer::Buffer() const
+const void* BinarySerializer::buffer() const
 {
     return (void*)mBuffer;
 }
 
 //------------------------------------------------------------------------------
-size_t BinarySerializer::Size() const
+size_t BinarySerializer::size() const
 {
     return mSize;
 }
 
 //------------------------------------------------------------------------------
-size_t BinarySerializer::BytesRead() const
+size_t BinarySerializer::bytesRead() const
 {
     return (mPosition - mBuffer);
 }
 
 //------------------------------------------------------------------------------
-void* BinarySerializer::TransferBuffer()
+void* BinarySerializer::transferBuffer()
 {
     void* retBuffer = mBuffer;
     mBuffer = nullptr;
@@ -187,7 +187,7 @@ void* BinarySerializer::TransferBuffer()
 }
 
 //------------------------------------------------------------------------------
-void BinarySerializer::ResetPosition()
+void BinarySerializer::resetPosition()
 {
     mPosition = mBuffer;
 }

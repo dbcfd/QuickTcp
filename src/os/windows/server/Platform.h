@@ -5,8 +5,12 @@
 #pragma warning(disable:4251)
 #pragma warning(disable:4275)
 //windows defines
-#if defined(SERVER_WINDOWS_BUILD)
-#define SERVER_WINDOWS_API __declspec(dllexport)
+#ifdef BUILD_SHARED_LIBS
+#if defined(WindowsServer_EXPORTS)
+#define WINDOWSSERVER_API __declspec(dllexport)
 #else
-#define SERVER_WINDOWS_API __declspec(dllimport)
+#define WINDOWSSERVER_API __declspec(dllimport)
+#endif
+#else
+#define WINDOWSSERVER_API
 #endif

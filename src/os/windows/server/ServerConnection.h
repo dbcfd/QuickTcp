@@ -1,54 +1,52 @@
 #pragma once
 
-#include "server/interface/IServerConnection.h"
+#include "os/windows/Server/Platform.h"
+#include "os/windows/server/Winsock2.h"
 
-#include "server/windows/Overlap.h"
-#include "server/windows/Winsock2.h"
+#include "server/IServerConnection.h"
+
+#include <atomic>
 
 namespace quicktcp {
-namespace server {
+namespace os {
 namespace windows {
+namespace server {
 
-class Socket;
+class IEventHandler;
+struct ConnectOverlap;
 
 /**
  * Represent a connection between a server and a client. An underlying socket
  * is used for communication between the server and client.
  */
-class SERVER_WINDOWS_API ServerConnection: public iface::IServerConnection, public Overlap<ServerConnection>
+class WINDOWSSERVER_API ServerConnection: public quicktcp::server::IServerConnection
 {
 public:
-    typedef std::function<void(HANDLE)> ConnectionClosed;
 	/**
 	 * Utilizes the socket created through an asynchronous accept (AcceptEx), to maintain a connection
 	 * between a server and a client
 	 */
-    ServerConnection(const Socket& socket, 
-        const std::string& identifier, 
-        workers::WorkerPool* pool,
-        ConnectionClosed ccFunc);
+    ServerConnection(ConnectOverlap& overlap, 
+        std::shared_ptr<IEventHandler> evHandler,
+        std::shared_ptr<quicktcp::server::IResponder> responder);
 	virtual ~ServerConnection();
 
-	inline const SOCKET getSocket() const;
+    virtual void disconnect();
 
-    virtual void close();
+    void prepareToReceive();
+    void processResponse(std::shared_ptr<utilities::ByteStream> stream);
 
 private:
-    virtual bool blockingSend(const utilities::ByteStream& data);
-    virtual utilities::ByteStream blockingReceive();
+    ServerConnection(const ServerConnection& other);
 
-	SOCKET mSocket; //socket
-	DWORD mBytes;//bytes received or sent
-	char mBuffer[MAX_BUFFER_SIZE];//storage buffer
-	WSABUF mDataBuffer;//Winsock2 specific buffer for send/recv
-    ConnectionClosed mConnectionClosed;
+    ConnectOverlap& mOverlap;
+    std::shared_ptr<IEventHandler> mEventHandler;
 };
 
-const SOCKET ServerConnection::getSocket() const
-{
-    return mSocket;
-}
+//inline implementations
+//------------------------------------------------------------------------------
 
+}
 }
 }
 }

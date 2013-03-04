@@ -1,16 +1,49 @@
-#ifdef WINDOWS
-#include "client/windows/Client.h"
+#include "os/windows/client/Client.h"
+
+#include "utilities/ByteStream.h"
+
+#include <async/AsyncResult.h>
+
+#include <workers/IManager.h>
+#include <workers/BasicTask.h>
 
 #include <sstream>
 
-#include "client/windows/Socket.h"
-#include "client/windows/Callback.h"
-
-namespace c11http {
-namespace client {
+namespace quicktcp {
+namespace os {
 namespace windows {
+namespace client {
 
-Client::Client(const IClient::ClientResponseCallback& callback) : IClient(callback), mBytes(0) {
+//------------------------------------------------------------------------------
+struct Client::ReceiveOverlap : public WSAOVERLAPPED {
+    ReceiveOverlap() 
+    {
+        SecureZeroMemory((PVOID)this, sizeof (WSAOVERLAPPED));
+        if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
+        {
+            std::stringstream sstr;
+            sstr << "WSACreateEvent";
+            throw(std::runtime_error(sstr.str()));
+        }
+    }
+
+    ~ReceiveOverlap()
+    {
+        WSACloseEvent(hEvent);
+        hEvent = WSA_INVALID_EVENT;
+    }
+
+    std::shared_ptr<utilities::ByteStream> stream;
+};
+
+//------------------------------------------------------------------------------
+Client::Client(std::shared_ptr<async_cpp::workers::IManager> mgr, 
+        const quicktcp::client::ServerInfo& info,
+        std::shared_ptr<IListener> listener,
+        const size_t allocationSize) 
+    : quicktcp::client::IClient(info, listener), mManager(mgr),
+    mAllocatedStorage(new char[allocationSize]), mAllocationSize(allocationSize), mConnected(false), mSendsOutstanding(0)
+{
    //startup winsock
     WSAData wsaData;
     int iResult;
@@ -23,9 +56,14 @@ Client::Client(const IClient::ClientResponseCallback& callback) : IClient(callba
         WSACleanup();
         throw(std::runtime_error(sstr.str()));
     }
+
+    mReceiveOverlap = std::shared_ptr<ReceiveOverlap>(new ReceiveOverlap());
+
+    connect(info);
 }
 
-void Client::connect(const std::string& hostname, const unsigned int port) {
+//------------------------------------------------------------------------------
+void Client::connect(const quicktcp::client::ServerInfo& info) {
     //define where we're connecting to
     struct addrinfo* results = nullptr, *addrptr, hints;
     ZeroMemory(&hints, sizeof(hints));
@@ -36,10 +74,10 @@ void Client::connect(const std::string& hostname, const unsigned int port) {
     hints.ai_flags = AI_PASSIVE;
 
     std::stringstream sstr;
-    sstr << port;
+    sstr << info.port();
 
     //get the address information for the host
-    iResult = getaddrinfo(hostname.c_str(), sstr.str().c_str(), &hints, &results);
+    int iResult = getaddrinfo(info.address().c_str(), sstr.str().c_str(), &hints, &results);
 
     if(0 != iResult)
     {
@@ -52,7 +90,7 @@ void Client::connect(const std::string& hostname, const unsigned int port) {
     if(nullptr == results)
     {
         std::stringstream sstr;
-        sstr << "no results for server " << hostname;
+        sstr << "no results for server " << info.address();
         WSACleanup();
         throw(std::runtime_error(sstr.str()));
     }
@@ -78,7 +116,7 @@ void Client::connect(const std::string& hostname, const unsigned int port) {
         else
         {
             //successfully connected, we found a server to use
-            mSocket = socket.getSocket();
+            mSocket = socket;
             addrptr = nullptr;
         }
     }
@@ -86,21 +124,22 @@ void Client::connect(const std::string& hostname, const unsigned int port) {
     freeaddrinfo(results);
     results = nullptr;
 
-    if(!mSocket || INVALID_SOCKET == mSocket)
+    if(0 == mSocket.getSocket() || INVALID_SOCKET == mSocket.getSocket())
     {
         std::stringstream sstr;
         sstr << "Failed to create client connection" << std::endl;
         throw(std::runtime_error(sstr.str()));
     }
-    mDataBuffer.len = sizeof(mBuffer);
-    mDataBuffer.buf = mBuffer;
-    createOverlap(this);
-    mSendOverlap = new Overlap<Client>(this);
+    mBuffer.buf = mAllocatedStorage.get();
+    mBuffer.len = mAllocationSize;
+
+    mConnected = true;
 
     //queue our receive, we are now ready to go
     prepareClientToReceiveData();
 }
 
+//------------------------------------------------------------------------------
 void Client::prepareClientToReceiveData()
 {
     DWORD flags = 0;
@@ -111,181 +150,136 @@ void Client::prepareClientToReceiveData()
      * a receive, there exists the possibility that there is data ready to be
      * received. We need to check for i/o pending if WSARecv returns SOCKET_ERROR.
      */
-    if(SOCKET_ERROR == WSARecv(mSocket, &mDataBuffer, 1, &nbBytesReceived, &flags, getOverlap(), 0))
+    while(SOCKET_ERROR != WSARecv(mSocket.getSocket(), 
+        &mBuffer, 1, &nbBytesReceived, &flags, mReceiveOverlap.get(), 0))
     {
-        int lastError = WSAGetLastError();
-
-        if(WSA_IO_PENDING != lastError)
-        {
-            std::stringstream sstr;
-            sstr << "Error prepping client socket for receive" << WSAGetLastError();
-            throw(std::runtime_error(sstr.str()));
-        }
-
-        if(WSAECONNRESET == lastError) //server has shutdown, client no longer needed
-        {
-            delete this;
-        }
+        std::shared_ptr<utilities::ByteStream> stream(new utilities::ByteStream((void*)mBuffer.buf, (size_t)nbBytesReceived));
+        sendDataToListener(stream);
     }
-    else
+
+    int lastError = WSAGetLastError();
+
+    if(WSA_IO_PENDING != lastError)
     {
-        /**
-         * We received some data, pass it along to the callback, and attempt to queue another receive.
-         */
-         
-        Callback* callback = getCallback();
+        mConnected = false;
+        std::stringstream sstr;
+        sstr << "Error prepping client socket for receive" << WSAGetLastError();
+        throw(std::runtime_error(sstr.str()));
+    }
 
-        if(0 != callback)
-            callback->receiveComplete(mIdentifier, mBuffer, nbBytesReceived);
-
-        prepareClientToReceiveData();
+    if(WSAECONNRESET == lastError) //server has shutdown, client no longer needed
+    {
+        mConnected = false;
+        mListener->serverDisconnected();
     }
 }
 
+//------------------------------------------------------------------------------
 Client::~Client()
 {
-    closesocket(mSocket);
+    disconnect();
     mSocket = INVALID_SOCKET;
-    delete mSendOverlap;
+    std::mutex mutex;
+    std::unique_lock<std::mutex> lock(mutex);
+    mSendsOutstandingSignal.wait(lock, [this]()->bool{
+        size_t outstanding = mSendsOutstanding;
+        return (outstanding == 0);
+    } );
 }
 
-void Client::waitForEvents() throw(std::runtime_error)
+//------------------------------------------------------------------------------
+void Client::disconnect()
 {
-    /**
-     * Setup our list of handles that we're waiting for, one for the overlap used
-     * to receive data, and one for the overlap used when sending data.
-     */
-    HANDLE handles[2];
-    handles[0] = getOverlap()->hEvent;
-    handles[1] = mSendOverlap->getOverlap()->hEvent;
-
-    while(mConnected)
-    {
-        DWORD wait_rc = WSA_WAIT_IO_COMPLETION;
-
-        /**
-         * A handle can be signalted if i/o is not complete, so we want to wait
-         * until i/o completes before we try to handle the signal.
-         */
-        while(WSA_WAIT_IO_COMPLETION == wait_rc && mConnected)
-        {
-            /**
-             * Here is where we actually wait for all of our handles.
-             */
-            if(WSA_WAIT_FAILED
-                    == (wait_rc = WSAWaitForMultipleEvents(2, handles, FALSE, WSA_INFINITE, TRUE)))
-            {
-                int error = WSAGetLastError();
-
-                std::stringstream sstr;
-                sstr << "WSAWaitForMultipleEvents Error " << WSAGetLastError();
-                throw(std::runtime_error(sstr.str()));
-            }
-        }
-
-        if(!mConnected)
-            break;
-
-        int index = (wait_rc - WSA_WAIT_EVENT_0);
-
-        if(2 <= index)
-        {
-            throw(std::runtime_error("WSAWaitForMultipleEvents Returned invalid handle"));
-        }
-
-        DWORD nbBytes = 0;
-        DWORD flags = 0;
-
-        switch(index)
-        {
-            case 0:
-                /**
-                 * Get the results associated with our receive overlap. This indicates
-                 * that a receive completed, and some number of bytes were received. FALSE
-                 * indicates that if the receive isn't complete, we shouldn't wait. This will
-                 * put us back in the top loop waiting for i/o completion.
-                 */
-                if(WSAGetOverlappedResult(mSocket, getOverlap(), &nbBytes, FALSE, &flags))
-                {
-
-                    Callback* callback = getCallback();
-
-                    if(0 != callback)
-                        callback->receiveComplete(mIdentifier, mBuffer, nbBytes);
-                }
-
-                break;
-
-            case 1:
-                /**
-                 * Get the results associated with our send overlap. This indicates
-                 * that a send completed, and some number of bytes were received. FALSE
-                 * indicates that if the send isn't complete, we shouldn't wait. This will
-                 * put us back in the top loop waiting for i/o completion.
-                 */
-                if(WSAGetOverlappedResult(mSocket, mSendOverlap->getOverlap(), &nbBytes, FALSE,
-                        &flags))
-                {
-                    char* buffer = mSendBuffers.front();
-                    mSendBuffers.pop();
-                    delete[] buffer;
-
-                    Callback* callback = getCallback();
-
-                    if(0 != callback)
-                        callback->sendComplete(mIdentifier, nbBytes);
-                }
-
-                break;
-
-            default:
-                break;
-        }
-
-        WSAResetEvent(handles[index]);
-    }
-}
-
-void Client::disconnect() throw(std::runtime_error)
-{
-
     if(mConnected)
     {
         mConnected = false;
-        mCallback = 0;
 
-        ::send(mSocket, nullptr, 0, 0);
-
-        WSASetEvent(getOverlap()->hEvent);
+        ::send(mSocket.getSocket(), nullptr, 0, 0);
 
         /**
          * Close out our socket to sending and receiving. This doesn't actually send
          * or receive disconnection signals.
          */
-WSASendDisconnect        (mSocket, 0);
-        WSARecvDisconnect(mSocket, 0);
+        WSASendDisconnect(mSocket.getSocket(), 0);
+        WSARecvDisconnect(mSocket.getSocket(), 0);
 
-        Socket closedSocket(mSocket);
-        closedSocket.closeSocket();
+        mSocket.closeSocket();
     }
 }
 
-void Client::sendDataToServer(const char* data, const unsigned int count) throw(std::runtime_error)
+//------------------------------------------------------------------------------
+struct Client::SendOverlap : public WSAOVERLAPPED {
+    SendOverlap(Client& cl, std::shared_ptr<utilities::ByteStream> str) : client(cl), stream(str)
+    {
+        SecureZeroMemory((PVOID)this, sizeof (WSAOVERLAPPED));
+        if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
+        {
+            std::stringstream sstr;
+            sstr << "WSACreateEvent";
+            throw(std::runtime_error(sstr.str()));
+        }
+
+        buffer.len = stream->size();
+        buffer.buf = (CHAR*) stream->buffer();
+    }
+
+    ~SendOverlap()
+    {
+        WSACloseEvent(hEvent);
+        hEvent = WSA_INVALID_EVENT;
+    }
+
+    Client& client;
+    WSABUF buffer;
+    std::promise<async_cpp::async::AsyncResult> promise;
+    std::shared_ptr<utilities::ByteStream> stream;
+};
+
+//------------------------------------------------------------------------------
+void CALLBACK ClientSendCompletion (
+  IN DWORD dwError, 
+  IN DWORD cbTransferred, 
+  IN LPWSAOVERLAPPED lpOverlapped, 
+  IN DWORD dwFlags
+)
 {
-    char* buffer = new char[count];
-    memcpy(buffer, data, count);
-    mSendBuffers.push(buffer);
-    WSABUF dataBuffer;
+    auto so = static_cast<Client::SendOverlap*>(lpOverlapped);
+    if(nullptr == so->stream)
+    {
+        so->stream = so->client.stream(cbTransferred);
+    }
+    else
+    {
+        so->stream->append(so->client.stream(cbTransferred));
+    }
+    //no socket error, means no pending i/o
+    if(SOCKET_ERROR != dwError)
+    {
+        so->promise.set_value(async_cpp::async::AsyncResult(so->client.stream(cbTransferred)));
+        so->client.completeSend();
+        delete so;
+    }
+}
+
+//------------------------------------------------------------------------------
+std::future<async_cpp::async::AsyncResult> Client::send(std::shared_ptr<utilities::ByteStream> byteStream)
+{
+    if(!mConnected)
+    {
+        std::promise<async_cpp::async::AsyncResult> promise;
+        promise.set_value(async_cpp::async::AsyncResult("Client disconnected"));
+        return promise.get_future();
+    }
+
     DWORD flags = 0;
-    DWORD nbBytes = 0;
-    dataBuffer.len = count;
-    dataBuffer.buf = (CHAR*) buffer;
+    auto sendOverlap = new SendOverlap(*this, byteStream);
 
     /**
      * Perform an asynchronous send, with no callback. This uses the overlapped
      * structure and its event handle to determine when the send is complete.
      */
-    int iResult = WSASend(mSocket, &dataBuffer, 1, 0, flags, mSendOverlap->getOverlap(), 0);
+    mSendsOutstanding++;
+    int iResult = WSASend(mSocket.getSocket(), &sendOverlap->buffer, 1, 0, flags, sendOverlap, &ClientSendCompletion);
 
     /**
      * Asynchronous send returns a SOCKET_ERROR if the send does not complete immediately.
@@ -308,20 +302,74 @@ void Client::sendDataToServer(const char* data, const unsigned int count) throw(
      */
     else if(0 == iResult)
     {
-        if(WSAGetOverlappedResult(mSocket, mSendOverlap->getOverlap(), &nbBytes, FALSE, 0))
+        DWORD nbBytes = 0;
+        if(WSAGetOverlappedResult(mSocket.getSocket(), sendOverlap, &nbBytes, FALSE, 0))
         {
-            //socket call completed
-            Callback* callback = getCallback();
-
-            if(0 != callback)
-                callback->sendComplete(mIdentifier, nbBytes);
+            completeSend();
+            sendOverlap->promise.set_value(async_cpp::async::AsyncResult(stream(nbBytes)));
         }
     }
 
+    return sendOverlap->promise.get_future();
+}
+
+//------------------------------------------------------------------------------
+void Client::completeSend()
+{
+    mSendsOutstanding--;
+    mSendsOutstandingSignal.notify_all();
+}
+
+//------------------------------------------------------------------------------
+void Client::waitForEvents()
+{
+    WSAEVENT events[] = {mReceiveOverlap->hEvent};
+    while(mConnected)
+    {
+        if(WSA_WAIT_FAILED != WSAWaitForMultipleEvents(1, events, true, WSA_INFINITE, true))
+        {
+            WSAResetEvent(mReceiveOverlap->hEvent);
+            DWORD cbTransferred = 0;
+            DWORD flags = 0;
+            if(WSAGetOverlappedResult(mSocket.getSocket(), mReceiveOverlap.get(), &cbTransferred, FALSE, &flags))
+            {
+                if(cbTransferred == 0)
+                {
+                    disconnect();
+                }
+                else 
+                {
+                    if(nullptr == mReceiveOverlap->stream)
+                    {
+                        mReceiveOverlap->stream = stream(cbTransferred);
+                    }
+                    else
+                    {
+                        mReceiveOverlap->stream->append(stream(cbTransferred));
+                    }
+                    //if not io incomplete, can send our data
+                    if(WSA_IO_INCOMPLETE != flags && nullptr != mReceiveOverlap->stream)
+                    {
+                        mManager->run(std::shared_ptr<async_cpp::workers::BasicTask>(new async_cpp::workers::BasicTask(std::bind(
+                            [](Client& client, std::shared_ptr<utilities::ByteStream> stream)->void {
+                                client.sendDataToListener(stream);  
+                            }, std::ref(*this), mReceiveOverlap->stream)
+                        ) ) );
+                        mReceiveOverlap->stream.reset();
+                    }
+                }
+            }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+std::shared_ptr<utilities::ByteStream> Client::stream(size_t nbBytes) const
+{
+    return std::shared_ptr<utilities::ByteStream>(new utilities::ByteStream(mBuffer.buf, nbBytes));
 }
 
 }
 }
 }
-
-#endif
+}

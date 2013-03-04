@@ -4,8 +4,10 @@ file(GLOB HEADERS "*.h")
 
 file(GLOB SOURCES "*.cpp")
 
+set(async.cpp_VERSION 0.5.0)
+find_package(async.cpp REQUIRED)
 find_package(Winsock2)
-SET (DEPENDENCIES ${WINSOCK2_LIBRARIES})
+SET (DEPENDENCIES Server Utilities ${WINSOCK2_LIBRARIES} ${ASYNC.CPP_LIBRARIES})
 
 add_library (${TARGET} ${LIBRARY_BUILD_TYPE} ${HEADERS} ${SOURCES}) 
 target_link_libraries (${TARGET} ${DEPENDENCIES})

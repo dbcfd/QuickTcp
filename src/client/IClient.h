@@ -6,67 +6,44 @@
 #include <future>
 #include <memory>
 
+namespace async_cpp {
+namespace async {
+class AsyncResult;
+}
+}
+
 namespace quicktcp {
 
 namespace utilities {
 class ByteStream;
 }
 
-namespace workers {
-class Manager;
-}
-
 namespace client {
+
 class CLIENT_API IClient {
 public:
-    class CLIENT_API SendResult
+    class IListener 
     {
     public:
-        SendResult();
-        SendResult(const std::string& err);
-
-        inline void check() const;
-
-    private:
-        std::string mError;
+        virtual void receive(std::shared_ptr<utilities::ByteStream> stream) = 0;
+        virtual void serverDisconnected() = 0;
     };
 
-    IClient(std::shared_ptr<workers::Manager> manager, 
-        const ServerInfo& info, 
-        std::function<void(std::shared_ptr<utilities::ByteStream>)> onReceive);
+    IClient(const ServerInfo& info, std::shared_ptr<IListener> listener);
 
-    std::future<SendResult> send(std::shared_ptr<utilities::ByteStream> stream);
-
+    virtual std::future<async_cpp::async::AsyncResult> send(std::shared_ptr<utilities::ByteStream> stream) = 0;
     virtual void disconnect() = 0;
+    virtual void waitForEvents() = 0;
 
-    inline std::shared_ptr<workers::Manager> manager() const;
+    void sendDataToListener(std::shared_ptr<utilities::ByteStream> stream);
 
 protected:
-    void receive(std::shared_ptr<utilities::ByteStream> stream) const;
-
-    virtual void performSend(std::unique_ptr<std::promise<SendResult>> responsePromise, std::shared_ptr<utilities::ByteStream> stream) = 0;
-
-private:
-   std::shared_ptr<workers::Manager> mManager;
-   std::function<void(std::shared_ptr<utilities::ByteStream>)> mOnReceive;
-   ServerInfo mInfo;
+    std::shared_ptr<IListener> mListener;
+    ServerInfo mInfo;
 };
 
 //inline implementations
 //------------------------------------------------------------------------------
-void IClient::SendResult::check() const
-{
-    if(!mError.empty())
-    {
-        throw(std::runtime_error(mError));
-    }
-}
-
-//------------------------------------------------------------------------------
-std::shared_ptr<workers::Manager> IClient::manager() const
-{
-    return mManager;
-}
 
 }
 }

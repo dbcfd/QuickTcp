@@ -3,6 +3,8 @@
 #include "server/Platform.h"
 #include "server/IServer.h"
 
+#include "async/AsyncResult.h"
+
 #include <future>
 #include <memory>
 
@@ -15,73 +17,23 @@ class ByteStream;
 namespace server {
 
 class IServer;
+class IResponder;
 
 class SERVER_API IServerConnection {
-public:
-    class SERVER_API Response
-    {
-    public:
-        Response(std::shared_ptr<utilities::ByteStream> stream);
-        Response(const std::string& error);
+public:       
+    IServerConnection(std::shared_ptr<IResponder> responder);
+    virtual ~IServerConnection();  
 
-        inline const std::string& error() const;
-        inline std::shared_ptr<utilities::ByteStream> stream() const;
+    virtual void disconnect() = 0;
 
-    private:
-        std::shared_ptr<utilities::ByteStream> mStream;
-        std::string mError;
-    };
-
-    class SERVER_API ResponseComplete
-    {
-    public:
-        ResponseComplete(const std::string& error);
-        ResponseComplete();
-
-        inline const std::string& error() const;
-    private:
-        std::string mError;
-    };
-
-    IServerConnection(std::shared_ptr<IServer> server);
-
-    std::future<ResponseComplete> respond(std::shared_ptr<utilities::ByteStream> stream);
-
-    inline std::shared_ptr<IServer> server() const;
-
-    virtual void disconnect();
+    std::future<async_cpp::async::AsyncResult> getResponse(std::shared_ptr<utilities::ByteStream> stream);
 
 protected:
-    virtual Response determineResponse(std::shared_ptr<utilities::ByteStream> stream) = 0;
-
-private:
-   std::shared_ptr<IServer> mServer;
+   std::shared_ptr<IResponder> mResponder;
 };
 
 //inline implementations
 //------------------------------------------------------------------------------
-const std::string& IServerConnection::Response::error() const
-{
-    return mError;
-}
-
-//------------------------------------------------------------------------------
-std::shared_ptr<utilities::ByteStream> IServerConnection::Response::stream() const
-{
-    return mStream;
-}
-
-//------------------------------------------------------------------------------
-const std::string& IServerConnection::ResponseComplete::error() const
-{
-    return mError;
-}
-
-//------------------------------------------------------------------------------
-std::shared_ptr<IServer> IServerConnection::server() const
-{
-    return mServer;
-}
 
 }
 }

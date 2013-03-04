@@ -1,7 +1,7 @@
-#include "Cache/BinarySerializer.h"
+#include "Utilities/BinarySerializer.h"
 
-namespace markit {
-namespace cache {
+namespace quicktcp {
+namespace utilities {
 
 //------------------------------------------------------------------------------
 BinarySerializer::BinarySerializer(size_t expectedSize) : mAllocatedSize(expectedSize), mSize(0)
@@ -54,29 +54,29 @@ BinarySerializer::~BinarySerializer()
 }
 
 //------------------------------------------------------------------------------
-bool BinarySerializer::WriteString(const std::string& str)
+bool BinarySerializer::writeString(const std::string& str)
 {
     size_t len = str.size();
-    bool ret = WriteT<size_t>(len);
+    bool ret = writeT<size_t>(len);
     if(ret && 0 != len)
     {
-        ret = WriteT<char>(str[0], sizeof(char), len);
+        ret = writeT<char>(str[0], sizeof(char), len);
     }
     return ret;
 }
 
 //------------------------------------------------------------------------------
-bool BinarySerializer::ReadString(std::string& str)
+bool BinarySerializer::readString(std::string& str)
 {
     size_t len = 0;
-    bool ret = ReadT<size_t>(len);
+    bool ret = readT<size_t>(len);
     ret = (std::string::npos != len);
     if(ret && 0 != len)
     {
         try
         {
             str.resize(len, 0);
-            ret = ReadT<char>(str[0], sizeof(char), len);
+            ret = readT<char>(str[0], sizeof(char), len);
         }
         catch(std::bad_alloc&)
         {

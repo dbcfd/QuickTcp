@@ -1,39 +1,68 @@
 #pragma once
 
-#include <queue>
+#include "os/windows/client/Platform.h"
+#include "os/windows/client/Socket.h"
+#include "os/windows/client/Winsock2.h"
 
-#include "client/windows/Overlap.h"
+#include "client/IClient.h"
 
-namespace c11http {
-namespace client {
+#include <atomic>
+#include <map>
+
+namespace async_cpp {
+namespace workers {
+class IManager;
+}
+}
+
+namespace quicktcp {
+namespace os {
 namespace windows {
+namespace client {
 
 /**
  * Winsock2 implementation of a client, which is a connection to some server. This class is implemented asynchronously
  * and will not create any additional threads.
  */
-class CLIENT_WINDOWS_API Client : public IClient, public Overlap<Client>
+class WINDOWSCLIENT_API Client : public quicktcp::client::IClient
 {
 public:
-	Client(const IClient::ClientResponseCallback& callback);
+    Client(std::shared_ptr<async_cpp::workers::IManager> mgr, 
+        const quicktcp::client::ServerInfo& info,
+        std::shared_ptr<IListener> listener,
+        const size_t allocationSize = 1024);
 	~Client();
 
-	virtual objects::HttpResponse sendRequestToServer(const objects::HttpRequest& req);
-   virtual void receiveResponseFromServer(const objects::HttpResponse& resp);
-   virtual void disconnect();
+    virtual std::future<async_cpp::async::AsyncResult> send(std::shared_ptr<utilities::ByteStream> stream);
+    virtual void disconnect();
+    virtual void waitForEvents();
 
-protected:
-   virtual void performServerConnection(const std::string& ip, const unsigned int port);
+    std::shared_ptr<utilities::ByteStream> stream(size_t nbBytes) const;
+    void completeSend();
 
+    struct SendOverlap;
 private:
-	SOCKET mSocket;
-	DWORD mBytes;
-	char mBuffer[MAX_BUFFER_SIZE];
-	WSABUF mDataBuffer;
-	Overlap<Client>* mSendOverlap;
+    Client(const Client& other);
+    struct ReceiveOverlap;
+
+    void prepareClientToReceiveData();
+    void connect(const quicktcp::client::ServerInfo& info);
+
+    std::shared_ptr<async_cpp::workers::IManager> mManager;
+    Socket mSocket;
+    WSABUF mBuffer;
+    std::shared_ptr<char> mAllocatedStorage;
+    size_t mAllocationSize;
+    std::atomic<bool> mConnected;
+    std::shared_ptr<ReceiveOverlap> mReceiveOverlap;
+    std::atomic<size_t> mSendsOutstanding;
+    std::condition_variable mSendsOutstandingSignal;
 };
 
-}
-}
-}
+//inline implementations
+//------------------------------------------------------------------------------
 
+}
+}
+}
+}

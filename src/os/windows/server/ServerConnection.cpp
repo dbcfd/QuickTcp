@@ -1,104 +1,81 @@
-#ifdef WINDOWS
-#include "server/windows/ServerConnection.h"
-#include "server/windows/Socket.h"
+#include "os/windows/server/ServerConnection.h"
+#include "os/windows/server/ConnectOverlap.h"
+#include "os/windows/server/IEventHandler.h"
+#include "os/windows/server/Socket.h"
+
+#include "server/IResponder.h"
+
+#include "utilities/ByteStream.h"
+
+#include <assert.h>
+#include <sstream>
 
 namespace quicktcp {
-namespace server {
+namespace os {
 namespace windows {
+namespace server {
 
-ServerConnection::ServerConnection(const Socket& socket, 
-        const std::string& identifier, 
-        workers::WorkerPool* pool,
-        ServerConnection::ConnectionClosed ccFunc) :
-Overlap<ServerConnection>(), iface::IServerConnection(identifier, pool), mSocket(socket.getSocket()), mBytes(0), mConnectionClosed(ccFunc)
+//------------------------------------------------------------------------------
+ServerConnection::ServerConnection(ConnectOverlap& overlap, 
+        std::shared_ptr<IEventHandler> evHandler,
+        std::shared_ptr<quicktcp::server::IResponder> responder) 
+        : quicktcp::server::IServerConnection(responder), mOverlap(overlap), mEventHandler(evHandler)
 {
-    SecureZeroMemory(mBuffer, sizeof(mBuffer) / sizeof(mBuffer[0]));
-
-    mDataBuffer.len = sizeof(mBuffer);
-    mDataBuffer.buf = mBuffer;
-    createOverlap(this);
+    assert(nullptr != evHandler);
 }
 
+//------------------------------------------------------------------------------
 ServerConnection::~ServerConnection()
 {
-    if(connected())
-    {
-        close();
-    }
-}
-
-void ServerConnection::close()
-{
     disconnect();
-    DWORD nbBytes = 0;
-    mConnectionClosed(getOverlap()->hEvent);
-    //wake up any sockets trying to receive
-    WSASetEvent(getOverlap()->hEvent);
-    WSARecvDisconnect(mSocket, 0);
-    WSASendDisconnect(mSocket, 0);
-    closesocket(mSocket);
-    mSocket = INVALID_SOCKET;
 }
 
-utilities::ByteStream ServerConnection::blockingReceive()
+//------------------------------------------------------------------------------
+void ServerConnection::disconnect()
+{
+    mOverlap.reset();
+}
+
+//------------------------------------------------------------------------------
+void ServerConnection::prepareToReceive()
 {
     DWORD flags = 0;
-    DWORD nbBytes = 0;
+    DWORD nbBytesReceived = 0;
 
-    utilities::ByteStream ret;
-    //make sure connection exists and recv has completed
-    if(WSAGetOverlappedResult(mSocket, getOverlap(), &nbBytes, TRUE, &flags))
+    /**
+     * We need to queue an asynchronous receive, but since we're queue'ing
+     * a receive, there exists the possibility that there is data ready to be
+     * received. We need to check for i/o pending if WSARecv returns SOCKET_ERROR.
+     */
+    while(SOCKET_ERROR != WSARecv(mOverlap.socket->socket(), &mOverlap.wsaBuffer, 1, &nbBytesReceived, &flags, &mOverlap, 0))
     {
-        if(0 == nbBytes)
-        {
-            close();
-        }
-        else
-        {
-            ret = utilities::ByteStream(mBuffer, nbBytes);
-        }
+        mOverlap.transferBufferToStream((size_t)nbBytesReceived);
+        processResponse(mOverlap.stream);
     }
 
-    //queue the socket to receive again
-    if(connected() && 0 != nbBytes)
+    int lastError = WSAGetLastError();
+
+    if(WSA_IO_PENDING != lastError)
     {
-        receive();
+        std::stringstream sstr;
+        sstr << "Error prepping client socket for receive" << WSAGetLastError();
+        throw(std::runtime_error(sstr.str()));
     }
-    return ret;
+
+    if(WSAECONNRESET == lastError) //client has shutdown, connection no longer needed
+    {
+        mResponder->connectionClosed();
+        mEventHandler->disconnected(*this);
+    }
 }
 
-bool ServerConnection::blockingSend(const utilities::ByteStream& data)
+//------------------------------------------------------------------------------
+void ServerConnection::processResponse(std::shared_ptr<utilities::ByteStream> stream)
 {
-    WSABUF dataBuffer;
-    DWORD flags = 0;
-    DWORD nbBytes = 0;
-    dataBuffer.len = data.getSize();
-    dataBuffer.buf = (CHAR*) data.getBuffer();
-
-    WSAOVERLAPPED* overlap = getOverlap();
-
-    bool ret = true;
-    int rc = WSASend(mSocket, &dataBuffer, 1, &nbBytes, 0, overlap, nullptr);
-    ret = ((rc == SOCKET_ERROR) && (WSA_IO_PENDING != WSAGetLastError()));
-
-    if(ret && connected())
-    {
-        rc = WSAWaitForMultipleEvents(1, &(overlap->hEvent), TRUE, INFINITE, TRUE);
-        ret = (rc == WSA_WAIT_FAILED);
-    }
-
-    if(ret && connected())
-    {
-        rc = WSAGetOverlappedResult(mSocket, overlap, &nbBytes, FALSE, &flags);
-        ret = (rc == FALSE);
-    }
-
-    WSAResetEvent(overlap->hEvent);
-    return ret;
+    mEventHandler->handleResponse(getResponse(stream));
 }
 
 }
 }
 }
-
-#endif
+}

@@ -1,21 +1,11 @@
-#ifdef WINDOWS
-#include "server/windows/Socket.h"
+#include "os/windows/Server/Socket.h"
 
 namespace quicktcp {
-namespace server {
+namespace os {
 namespace windows {
+namespace server {
 
-Socket::Socket(const SOCKET _sckt) :
-        mSocket(_sckt)
-{
-
-}
-
-SOCKET Socket::getSocket() const
-{
-    return mSocket;
-}
-
+//------------------------------------------------------------------------------
 Socket::Socket()
 {
     mSocket = INVALID_SOCKET;
@@ -47,17 +37,40 @@ Socket::Socket()
         //TODO: log
     }
 }
+
+//------------------------------------------------------------------------------
 Socket::~Socket()
 {
 
 }
-void Socket::closeSocket()
+
+//------------------------------------------------------------------------------
+void Socket::disconnect(WSAOVERLAPPED& overlap)
 {
-    closesocket(mSocket);
+    LPFN_DISCONNECTEX pfn;
+    GUID guid = WSAID_DISCONNECTEX;
+    DWORD bytes = 0;
+
+    //use i/o control to set up the socket for accept ex
+    if(SOCKET_ERROR == WSAIoctl(mSocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid), &pfn, sizeof(pfn), &bytes, &overlap, nullptr))
+    {
+        throw(std::runtime_error("Failed to obtain DisconnectEx() pointer"));
+    }
+
+    DWORD flags = TF_REUSE_SOCKET;
+    if(!(mSocket, &overlap, flags, 0))
+    {
+        int lasterror = WSAGetLastError();
+
+        if(WSA_IO_PENDING != lasterror)
+        {
+            close();
+            throw(std::runtime_error("DisconnectEx Error()"));
+        }
+    }
 }
 
 }
 }
 }
-
-#endif
+}

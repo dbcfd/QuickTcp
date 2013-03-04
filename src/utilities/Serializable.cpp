@@ -1,6 +1,6 @@
-#include "utilities/Serializable.h"
-#include "utilities/BinarySerializer.h"
-#include "utilities/ByteStream.h"
+#include "Utilities/Serializable.h"
+#include "Utilities/BinarySerializer.h"
+#include "Utilities/ByteStream.h"
 
 namespace quicktcp {
 namespace utilities {
@@ -17,27 +17,27 @@ Serializable::~Serializable()
 }
 
 //------------------------------------------------------------------------------
-bool Serializable::ReadFrom(std::shared_ptr<ByteStream> stream)
+bool Serializable::readFrom(std::shared_ptr<ByteStream> stream)
 {
     bool bReturn = (nullptr != stream);
     if(bReturn)
     {
-        BinarySerializer serializer(stream->Buffer(), stream->Size());
-        bReturn = ReadBinary(serializer);
-        bReturn = bReturn && (serializer.BytesRead() == stream->Size());
+        BinarySerializer serializer(stream->buffer(), stream->size());
+        bReturn = readBinary(serializer);
+        bReturn = bReturn && (serializer.bytesRead() == stream->size());
     }
 
     return bReturn;
 }
 
 //------------------------------------------------------------------------------
-std::shared_ptr<ByteStream> Serializable::WriteTo() const
+std::shared_ptr<ByteStream> Serializable::writeTo() const
 {
-    BinarySerializer serializer(EstimateSize());
+    BinarySerializer serializer(estimateSize());
 
-    WriteBinary(serializer);
+    writeBinary(serializer);
 
-    return std::shared_ptr<ByteStream>(new ByteStream(serializer.TransferBuffer(), serializer.Size(), true));
+    return std::shared_ptr<ByteStream>(new ByteStream(serializer.transferBuffer(), serializer.size(), true));
 }
 
 }

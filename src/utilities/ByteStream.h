@@ -1,14 +1,16 @@
 #pragma once
 
-#include "Cache/Platform.h"
+#include "Utilities/Platform.h"
 
-namespace markit {
-namespace cache {
+#include <memory>
+
+namespace quicktcp {
+namespace utilities {
     
 /** 
  * Representation of a set of bytes that come from a blob, network connection, etc. Consists of a buffer with data and the size of that buffer.
  */
-class CACHE_API ByteStream {
+class UTILITIES_API ByteStream {
 public:
     /**
      * Construct a byte stream by copying an existing buffer with some size.
@@ -26,12 +28,17 @@ public:
     ~ByteStream();
 
     /**
+     * Append the contents of another bytestream to this stream, taking ownership of the stream.
+     */
+    void append(std::shared_ptr<ByteStream> other);
+
+    /**
      * Transfer ownership of this bytestream's buffer. Buffer is returned, but member buffer is set to nullptr.
      * @return Buffer that was held by this byte stream. Buffer is allocated with malloc, so should be free'd.
      */
-    inline const void* TransferBuffer();
-    inline const void* Buffer() const;
-    inline const size_t Size() const;
+    inline const void* transferBuffer();
+    inline const void* buffer() const;
+    inline const size_t size() const;
 private:
     void* mBuffer;
     size_t mSize;
@@ -39,7 +46,7 @@ private:
 
 //Inline Implementations
 //------------------------------------------------------------------------------
-const void* ByteStream::TransferBuffer()
+const void* ByteStream::transferBuffer()
 {
     const void* retBuffer = mBuffer;
     mBuffer = nullptr;
@@ -48,13 +55,13 @@ const void* ByteStream::TransferBuffer()
 }
 
 //------------------------------------------------------------------------------
-const void* ByteStream::Buffer() const
+const void* ByteStream::buffer() const
 {
     return mBuffer;
 }
 
 //------------------------------------------------------------------------------
-const size_t ByteStream::Size() const
+const size_t ByteStream::size() const
 {
     return mSize;
 }

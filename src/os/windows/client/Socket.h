@@ -1,17 +1,18 @@
 #pragma once
 
-#include "tcp/windows/Platform.h"
-#include "tcp/windows/Winsock2.h"
+#include "os/windows/client/Platform.h"
+#include "os/windows/client/Winsock2.h"
 
-namespace c11http {
-namespace tcp {
+namespace quicktcp {
+namespace os {
 namespace windows {
+namespace client {
 
 /**
  * Wrapper around the underlying Winsock2 socket implementation, which maintains
  * a network connection to some other device.
  */
-class TCP_WINDOWS_API Socket
+class WINDOWSCLIENT_API Socket
 {
 public:
     enum SocketState
@@ -21,7 +22,7 @@ public:
     /**
      * Create a socket, using next available socket, setting appropriate attribution.
      */
-    Socket() throw (std::runtime_error);
+    Socket();
     /**
      * Provide a wrapper around an existing socket. This allows us to use wrapper functionality
      * on a socket that may have been created in another method (e.g. accept)
@@ -33,13 +34,21 @@ public:
      */
     void closeSocket();
 
-    SOCKET getSocket() const;
+    inline SOCKET getSocket() const;
 
 private:
 
     SOCKET mSocket;
 };
 
+//inline implementations
+//------------------------------------------------------------------------------
+SOCKET Socket::getSocket() const
+{
+    return mSocket;
+}
+
+}
 }
 }
 }

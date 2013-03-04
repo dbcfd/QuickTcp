@@ -1,5 +1,3 @@
-add_subdirectory(workers)
-add_subdirectory(async)
 add_subdirectory(utilities)
 add_subdirectory(client)
 add_subdirectory(server)

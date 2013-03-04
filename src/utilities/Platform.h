@@ -5,8 +5,12 @@
 #pragma warning(disable:4251)
 
 //windows defines
-#if defined(UTILITIES_BUILD)
+#ifdef BUILD_SHARED_LIBS
+#ifdef Utilities_EXPORTS
 #define UTILITIES_API __declspec(dllexport)
 #else
 #define UTILITIES_API __declspec(dllimport)
+#endif
+#else
+#define UTILITIES_API
 #endif
