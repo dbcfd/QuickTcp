@@ -4,7 +4,6 @@
 #include "os/windows/server/Winsock2.h"
 
 #include "server/IServer.h"
-#include "server/IServerConnection.h"
 
 #include <vector>
 
@@ -26,7 +25,6 @@ namespace server {
 class IEventHandler;
 struct ConnectOverlap;
 class Socket;
-class ServerConnection;
 
 /**
  * Implementation of a server using Winsock2 calls. Will listen for connections on a port, accept those connections
@@ -45,8 +43,9 @@ public:
     ~Server();
 
     virtual void shutdown();
-    virtual std::future<async_cpp::async::AsyncResult> send(std::shared_ptr<utilities::ByteStream> stream); 
     virtual void waitForEvents();
+
+    std::future<async_cpp::async::AsyncResult> send(SOCKET sckt, std::shared_ptr<utilities::ByteStream> stream); 
 
     /**
      * Create the asynchronous socket and functionality necessary for AcceptEx

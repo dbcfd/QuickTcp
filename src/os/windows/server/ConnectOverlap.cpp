@@ -1,7 +1,6 @@
 #include "os/windows/server/ConnectOverlap.h"
 #include "os/windows/server/IEventHandler.h"
 #include "os/windows/server/Socket.h"
-#include "os/windows/server/ServerConnection.h"
 
 #include "server/IResponder.h"
 
@@ -9,6 +8,7 @@
 
 #include <minwinbase.h>
 #include <iostream>
+#include <sstream>
 
 namespace quicktcp {
 namespace os {
@@ -42,9 +42,10 @@ ConnectOverlap::~ConnectOverlap()
 //------------------------------------------------------------------------------
 bool ConnectOverlap::handleIOCompletion(SOCKET sckt, const size_t nbBytes)
 {
-    DWORD flags = 0;
+    flags = 0;
     if(WSAGetOverlappedResult(socket->socket(), this, &bytes, FALSE, &flags))
     {
+        ResetEvent(hEvent);
         if(sckt != socket->socket())
         {
             //handle the connection
@@ -57,13 +58,14 @@ bool ConnectOverlap::handleIOCompletion(SOCKET sckt, const size_t nbBytes)
                 //receive when connected, no bytes means disconnect
                 if(bytes == 0)
                 {
-                    currentConnection->disconnect();
+                    reset();
                 }
                 else
                 {
                     //handle read
                     transferBufferToStream(bytes);
-                    currentConnection->processResponse(stream);
+                    eventHandler->handleResponse(socket->socket(), transferStream());
+                    prepareToReceive();
                 }
             }
             else
@@ -106,7 +108,6 @@ void ConnectOverlap::reset()
     {
         isConnected = false;
         socket->disconnect(*this);
-        currentConnection.reset();
         responder->connectionClosed();
     }
 }
@@ -120,14 +121,13 @@ void ConnectOverlap::handleConnection()
     int bOptLen = sizeof(BOOL);
     //update the socket context based on our server
     setsockopt(socket->socket(), SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, (char*) &bOptVal, bOptLen);
-    currentConnection = std::shared_ptr<ServerConnection>(new ServerConnection(*this, eventHandler, responder));
 
     /**
     * When a connection is formed, we will be receiving information from that client at
     * some point in time. We queue a receive that will call back to a method that
     * can handle the connection information.
     */
-    currentConnection->prepareToReceive();
+    prepareToReceive();
 }
 
 //------------------------------------------------------------------------------
@@ -142,6 +142,45 @@ void ConnectOverlap::transferBufferToStream(const size_t nbBytes)
     else
     {
         stream->append(transferred);
+    }
+}
+
+//------------------------------------------------------------------------------
+void ConnectOverlap::prepareToReceive()
+{
+    flags = 0;
+    /**
+     * We need to queue an asynchronous receive, but since we're queue'ing
+     * a receive, there exists the possibility that there is data ready to be
+     * received. We need to check for i/o pending if WSARecv returns SOCKET_ERROR.
+     */
+    while(SOCKET_ERROR != WSARecv(socket->socket(), &wsaBuffer, 1, &bytes, &flags, this, 0))
+    {
+        //if no bytes, connection is shutting down
+        if(0 == bytes)
+        {
+            reset();
+        }
+        else
+        {
+            transferBufferToStream(bytes);
+            eventHandler->handleResponse(socket->socket(), transferStream());
+        }
+    }
+
+    int lastError = WSAGetLastError();
+
+    if(WSA_IO_PENDING != lastError)
+    {
+        std::stringstream sstr;
+        sstr << "Error prepping client socket for receive" << WSAGetLastError();
+        //todo: logging
+        std::cout << sstr << std::endl;
+    }
+
+    if(WSAECONNRESET == lastError) //client has shutdown, connection no longer needed
+    {
+        reset();
     }
 }
 

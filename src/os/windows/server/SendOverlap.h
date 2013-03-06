@@ -5,6 +5,7 @@
 
 #include "async/AsyncResult.h"
 
+#include <atomic>
 #include <future>
 
 namespace quicktcp {
@@ -27,8 +28,8 @@ public:
 
     void completeSend(const size_t nbBytes);
 
+    std::atomic_bool sendComplete;
     std::promise<async_cpp::async::AsyncResult> promise;
-    DWORD flags;
     SOCKET socket;
 };
 

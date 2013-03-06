@@ -87,7 +87,7 @@ public:
         std::this_thread::sleep_for(std::chrono::seconds(2));
     }
 
-    void sendToClient(const std::string& port, std::function<void(SOCKET)> afterSend)
+    void sendToServer(const std::string& port, std::function<void(SOCKET)> afterSend)
     {
         connect(port, [afterSend](SOCKET socket)->void {
             char buffer[] = "Data sent to server";
@@ -97,13 +97,14 @@ public:
             {
                 throw(std::runtime_error("send failed"));
             }
+            std::this_thread::sleep_for(std::chrono::seconds(2)); //wait for our send to actually go
             afterSend(socket);
         } );
     }
 
     void sendAndReceive(const std::string& port)
     {
-        sendToClient(port, [](SOCKET socket)->void {
+        sendToServer(port, [](SOCKET socket)->void {
             char buffer[200];
             int flags = 0;
             if(SOCKET_ERROR == recv(socket, buffer, 200, flags))
@@ -119,10 +120,11 @@ public:
 class Responder : public server::IResponder
 {
 public:
-    Responder() : clientDisconnected(false) {}
+    Responder() : clientDisconnected(false), attemptedResponse(false), hadResponseError(false) {}
 
     virtual std::future<async_cpp::async::AsyncResult> respond(std::shared_ptr<utilities::ByteStream> stream)
     {
+        attemptedResponse = true;
         std::string result("response from server");
         stream = std::shared_ptr<utilities::ByteStream>(new utilities::ByteStream((void*)&result[0], result.size()));
         promise.set_value(async_cpp::async::AsyncResult(stream));
@@ -134,7 +136,14 @@ public:
         clientDisconnected = true;
     }
 
+    virtual void responseError(async_cpp::async::AsyncResult& result)
+    {
+        hadResponseError = true;
+    }
+
     bool clientDisconnected;
+    bool attemptedResponse;
+    bool hadResponseError;
     std::promise<async_cpp::async::AsyncResult> promise;
 };
 
@@ -188,6 +197,28 @@ TEST_F(ServerTest, ACCEPT_CONNECTION)
     ASSERT_TRUE(client.couldConnect);
 
     ASSERT_TRUE(responder->clientDisconnected);
+
+    ASSERT_NO_THROW(server.shutdown());
+
+    thread.join();
+}
+
+TEST_F(ServerTest, ACCEPT_CONNECTION_SEND)
+{
+    Server server(serverInfo, manager, responder);
+
+    std::thread thread([&server]()->void {
+        server.waitForEvents();
+    } );
+
+    MockClient client;
+
+    ASSERT_NO_THROW(client.sendToServer(port, [&client](SOCKET) {} ) );
+
+    ASSERT_TRUE(client.couldConnect);
+
+    ASSERT_TRUE(responder->clientDisconnected);
+    ASSERT_TRUE(responder->attemptedResponse);
 
     ASSERT_NO_THROW(server.shutdown());
 

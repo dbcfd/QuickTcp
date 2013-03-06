@@ -24,8 +24,11 @@ struct IOverlap : public WSAOVERLAPPED {
 
     virtual bool handleIOCompletion(SOCKET sckt, const size_t nbBytes) = 0;
 
+    std::shared_ptr<utilities::ByteStream> transferStream();
+
     WSABUF wsaBuffer;
     DWORD bytes;
+    DWORD flags;
     std::shared_ptr<utilities::ByteStream> stream;
 };
 

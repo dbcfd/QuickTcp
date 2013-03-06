@@ -10,7 +10,7 @@ namespace windows {
 namespace server {
 
 //------------------------------------------------------------------------------
-IOverlap::IOverlap() : bytes(0)
+IOverlap::IOverlap() : bytes(0), flags(0)
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
@@ -27,6 +27,15 @@ IOverlap::~IOverlap()
     WSACloseEvent(hEvent);
     hEvent = WSA_INVALID_EVENT;
 }
+
+//------------------------------------------------------------------------------
+std::shared_ptr<utilities::ByteStream> IOverlap::transferStream()
+{
+    auto ret = stream;
+    stream.reset();
+    return ret;
+}
+
 
 }
 }

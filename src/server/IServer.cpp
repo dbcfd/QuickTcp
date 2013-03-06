@@ -1,5 +1,4 @@
 #include "server/IServer.h"
-#include "server/IServerConnection.h"
 
 namespace quicktcp {
 namespace server {

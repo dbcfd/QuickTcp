@@ -1,11 +1,12 @@
 #include "os/windows/server/Server.h"
 #include "os/windows/server/IEventHandler.h"
 #include "os/windows/server/ConnectOverlap.h"
-#include "os/windows/server/ServerConnection.h"
 #include "os/windows/server/SendOverlap.h"
 #include "os/windows/server/Socket.h"
 
 #include "async/AsyncResult.h"
+
+#include "server/IResponder.h"
 
 #include "utilities/ByteStream.h"
 
@@ -25,30 +26,40 @@ namespace server {
 //------------------------------------------------------------------------------
 class EventHandler : public IEventHandler {
 public:
-    EventHandler(Server& srvr, std::shared_ptr<async_cpp::workers::IManager> mgr) : server(srvr), manager(mgr)
+    EventHandler(Server& srvr, std::shared_ptr<quicktcp::server::IResponder> resp, std::shared_ptr<async_cpp::workers::IManager> mgr) 
+        : server(srvr), responder(resp), manager(mgr)
     {
 
     }
 
-    void queueAccept(ConnectOverlap& overlap)
+    virtual void queueAccept(ConnectOverlap& overlap)
     {
         server.prepareForClientConnection(overlap);
     }
 
-    void handleResponse(std::future<async_cpp::async::AsyncResult>& response) 
+    virtual void handleResponse(SOCKET sckt, std::shared_ptr<utilities::ByteStream> stream) 
     {
         manager->run(std::shared_ptr<async_cpp::workers::Task>(new async_cpp::workers::BasicTask(
-            [this, &response]() -> void {
-                auto result = response.get();
-                if(!result.wasError())
+            [this, sckt, stream]() -> void {
+                auto responseResult = responder->respond(stream).get();
+                if(responseResult.wasError())
                 {
-                    server.send(std::static_pointer_cast<utilities::ByteStream>(result.result()));
+                    responder->responseError(responseResult);
+                }
+                else
+                {
+                    auto sendResult = server.send(sckt, std::static_pointer_cast<utilities::ByteStream>(responseResult.result())).get();
+                    if(sendResult.wasError())
+                    {
+                        responder->responseError(sendResult);
+                    }
                 }
             }
         ) ) );
     }
 
     Server& server;
+    std::shared_ptr<quicktcp::server::IResponder> responder;
     std::shared_ptr<async_cpp::workers::IManager> manager;
 
 };
@@ -59,7 +70,7 @@ Server::Server(const quicktcp::server::ServerInfo& info,
         std::shared_ptr<quicktcp::server::IResponder> responder) :
     quicktcp::server::IServer(info), mManager(mgr), mResponder(responder), mIsRunning(true)
 {
-    mEventHandler = std::shared_ptr<IEventHandler>(new EventHandler(*this, mManager));
+    mEventHandler = std::shared_ptr<IEventHandler>(new EventHandler(*this, mResponder, mManager));
     assert(nullptr != mgr);
     assert(nullptr != responder);
 
@@ -170,6 +181,7 @@ void Server::shutdown()
             overlap->socket->close();
         }
         WSACleanup();
+        mManager->waitForTasksToComplete();
         mOverlaps.clear();
         mShutdownSignal.notify_all();
     }
@@ -236,14 +248,15 @@ void Server::prepareForClientConnection(ConnectOverlap& overlap)
 }
 
 //------------------------------------------------------------------------------
-std::future<async_cpp::async::AsyncResult> Server::send(std::shared_ptr<utilities::ByteStream> stream)
+std::future<async_cpp::async::AsyncResult> Server::send(SOCKET sckt, std::shared_ptr<utilities::ByteStream> stream)
 {
-    auto overlap = new SendOverlap(mSocket, stream);
+    auto overlap = new SendOverlap(sckt, stream);
     auto future = overlap->promise.get_future();
 
-    if(SOCKET_ERROR == WSASend(mSocket, &overlap->wsaBuffer, 1, &overlap->bytes, overlap->flags, overlap, 0))
+    if(SOCKET_ERROR == WSASend(sckt, &overlap->wsaBuffer, 1, &overlap->bytes, overlap->flags, overlap, 0))
     {
-        if(WSA_IO_PENDING != WSAGetLastError())
+        int lastError = WSAGetLastError();
+        if(WSA_IO_PENDING != lastError)
         {
             overlap->promise.set_value(async_cpp::async::AsyncResult("Error sending data"));
         }
@@ -251,7 +264,6 @@ std::future<async_cpp::async::AsyncResult> Server::send(std::shared_ptr<utilitie
     else
     {
         overlap->completeSend(overlap->bytes);
-        delete overlap;
     }
 
     return future;

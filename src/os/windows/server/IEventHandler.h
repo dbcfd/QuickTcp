@@ -3,14 +3,14 @@
 #include "os/windows/Server/Platform.h"
 
 #include <future>
-
-namespace async_cpp {
-namespace async {
-class AsyncResult;
-}
-}
+#include <memory>
 
 namespace quicktcp {
+
+namespace utilities {
+class ByteStream;
+}
+
 namespace os {
 namespace windows {
 namespace server {
@@ -24,7 +24,7 @@ struct ConnectOverlap;
 class IEventHandler {
 public:
     virtual void queueAccept(ConnectOverlap& overlap) = 0;
-    virtual void handleResponse(std::future<async_cpp::async::AsyncResult>& response) = 0;
+    virtual void handleResponse(SOCKET sckt, std::shared_ptr<utilities::ByteStream> stream) = 0;
 };
 
 //inline implementations

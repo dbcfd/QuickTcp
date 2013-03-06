@@ -31,13 +31,14 @@ struct ConnectOverlap : public IOverlap {
     void reset();
     void handleConnection();
     void transferBufferToStream(const size_t nbBytes);
+    void prepareToReceive();
 
     std::atomic_bool isConnected;
     std::shared_ptr<char> buffer;
     std::shared_ptr<Socket> socket;
-    std::shared_ptr<ServerConnection> currentConnection;
     std::shared_ptr<IEventHandler> eventHandler;
     std::shared_ptr<quicktcp::server::IResponder> responder;
+    DWORD flags;
 };
 
 }

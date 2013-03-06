@@ -36,6 +36,8 @@ Socket::Socket()
     {
         //TODO: log
     }
+
+    nRet = setsockopt(mSocket, SOL_SOCKET, SO_RCVBUF, (char*) &nZero, sizeof(nZero));
 }
 
 //------------------------------------------------------------------------------

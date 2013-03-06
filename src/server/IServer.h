@@ -33,7 +33,6 @@ public:
     IServer(const ServerInfo& info);
 
     virtual void shutdown() = 0;
-    virtual std::future<async_cpp::async::AsyncResult> send(std::shared_ptr<utilities::ByteStream> stream) = 0;
     virtual void waitForEvents() = 0;
 
 protected:
