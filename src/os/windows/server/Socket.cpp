@@ -58,7 +58,7 @@ void Socket::disconnect(WSAOVERLAPPED& overlap)
     }
 
     DWORD flags = TF_REUSE_SOCKET;
-    if(!(mSocket, &overlap, flags, 0))
+    if(!pfn(mSocket, &overlap, flags, 0))
     {
         int lasterror = WSAGetLastError();
 

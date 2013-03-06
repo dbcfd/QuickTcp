@@ -41,6 +41,7 @@ private:
 
     ConnectOverlap& mOverlap;
     std::shared_ptr<IEventHandler> mEventHandler;
+    DWORD mFlags;
 };
 
 //inline implementations

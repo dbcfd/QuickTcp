@@ -6,7 +6,7 @@
 #include "server/IServer.h"
 #include "server/IServerConnection.h"
 
-#include <map>
+#include <vector>
 
 namespace async_cpp {
 namespace workers {
@@ -48,25 +48,28 @@ public:
     virtual std::future<async_cpp::async::AsyncResult> send(std::shared_ptr<utilities::ByteStream> stream); 
     virtual void waitForEvents();
 
+    /**
+     * Create the asynchronous socket and functionality necessary for AcceptEx
+     */
+    void prepareForClientConnection(ConnectOverlap& overlap);
+
 private:
     /**
      * Create the socket that we listen on for new connections
      */
     void createServerSocket();
-    /**
-     * Create the asynchronous socket and functionality necessary for AcceptEx
-     */
-    void prepareForClientConnection(std::shared_ptr<ConnectOverlap> overlap);
 
     std::shared_ptr<IEventHandler> mEventHandler;
     std::shared_ptr<async_cpp::workers::IManager> mManager;
     std::shared_ptr<quicktcp::server::IResponder> mResponder;
+    std::shared_ptr<std::thread> mConnectionThread;
 
     std::atomic<bool> mIsRunning;
 
     SOCKET mSocket; //this is the socket we listen for connections on
     HANDLE mIOCP;
-    std::map<WSAEVENT, std::shared_ptr<ConnectOverlap>> mOverlaps;
+    std::vector<std::shared_ptr<ConnectOverlap>> mOverlaps;
+    std::condition_variable mShutdownSignal;
 };
 
 }

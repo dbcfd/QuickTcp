@@ -12,6 +12,7 @@
 #include "workers/IManager.h"
 #include "workers/BasicTask.h"
 
+#include <iostream>
 #include <sstream>
 
 #include <assert.h>
@@ -29,9 +30,9 @@ public:
 
     }
 
-    void disconnected(ServerConnection& cnct)
+    void queueAccept(ConnectOverlap& overlap)
     {
-        cnct.disconnect();
+        server.prepareForClientConnection(overlap);
     }
 
     void handleResponse(std::future<async_cpp::async::AsyncResult>& response) 
@@ -72,12 +73,21 @@ Server::Server(const quicktcp::server::ServerInfo& info,
 
     createServerSocket();
 
+    mOverlaps.reserve(info.maxConnections());
     for(size_t i = 0; i < info.maxConnections(); ++i)
     {
         std::shared_ptr<Socket> socket(new Socket());
-        std::shared_ptr<ConnectOverlap> overlap(new ConnectOverlap(std::move(socket), info.bufferSize()));
-        prepareForClientConnection(overlap);
-        mOverlaps.emplace(std::make_pair(overlap->hEvent, overlap));
+        std::shared_ptr<ConnectOverlap> overlap;
+        try {
+            overlap = std::shared_ptr<ConnectOverlap>(new ConnectOverlap(mIOCP, mEventHandler, mResponder, std::move(socket), info.bufferSize()));
+            prepareForClientConnection(*overlap);
+            mOverlaps.emplace_back(overlap);
+        }
+        catch(std::runtime_error&)
+        {
+            //todo logging
+            std::cout << "error building connection " << i << std::endl;
+        }
     }
 }
 
@@ -88,7 +98,7 @@ void Server::createServerSocket()
     //WSA startup successful, create address info
     struct addrinfo* result = nullptr, *ptr = nullptr, hints;
 
-    ZeroMemory(&hints, sizeof(hints));
+    SecureZeroMemory(&hints, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
@@ -107,6 +117,8 @@ void Server::createServerSocket()
 
     //getaddrinfo successful, create socket
     mSocket = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, nullptr, 0, WSA_FLAG_OVERLAPPED);
+
+    CreateIoCompletionPort((HANDLE)mSocket, mIOCP, (ULONG_PTR)mSocket, 0);
 
     //socket creation successful, bind to socket
     iResult = bind(mSocket, result->ai_addr, (int) result->ai_addrlen);
@@ -129,23 +141,38 @@ void Server::createServerSocket()
         WSACleanup();
         throw(std::runtime_error(sstr.str()));
     }
-
-    CreateIoCompletionPort((HANDLE)mSocket, mIOCP, (ULONG_PTR)mSocket, 0);
 }
 
 //------------------------------------------------------------------------------
 Server::~Server()
 {
     shutdown();
+    std::mutex mutex;
+    std::unique_lock<std::mutex> lock(mutex);
+    mShutdownSignal.wait(lock, [this]()->bool {
+        return mOverlaps.empty();
+    } );
 }
 
 //------------------------------------------------------------------------------
 void Server::shutdown()
 {
-    WSARecvDisconnect(mSocket, 0);
-    WSASendDisconnect(mSocket, 0);
-    closesocket(mSocket);
-    WSACleanup();
+    bool wasRunning = mIsRunning.exchange(false);
+    if(wasRunning)
+    {
+        ULONG_PTR key = 0;
+        PostQueuedCompletionStatus(mIOCP, 0, key, 0);
+        WSARecvDisconnect(mSocket, 0);
+        WSASendDisconnect(mSocket, 0);
+        closesocket(mSocket);
+        for(auto overlap : mOverlaps)
+        {
+            overlap->socket->close();
+        }
+        WSACleanup();
+        mOverlaps.clear();
+        mShutdownSignal.notify_all();
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -156,39 +183,14 @@ void Server::waitForEvents()
         DWORD bytes = 0;
         ULONG_PTR key = 0;
         LPOVERLAPPED overlap = 0;
-        if(GetQueuedCompletionStatus(mIOCP, &bytes, &key, &overlap, WSA_INFINITE))
+        if(GetQueuedCompletionStatus(mIOCP, &bytes, &key, &overlap, WSA_INFINITE) && mIsRunning)
         {
-            if(key == mSocket)
+            if(nullptr != overlap)
             {
                 auto ioverlap = static_cast<IOverlap*>(overlap);
-                switch (ioverlap->isConnect)
+                if(ioverlap->handleIOCompletion((SOCKET)key, bytes))
                 {
-                case true :
-                    {
-                        auto connectOverlap = static_cast<ConnectOverlap*>(overlap);
-                        if(WSAGetOverlappedResult(connectOverlap->socket->socket(), connectOverlap, &connectOverlap->bytesRead, FALSE, 0))
-                        {
-                            //i/o complete?
-                            connectOverlap->handleConnection(mIOCP, mEventHandler, mResponder);
-                        }
-                        else
-                        {
-                            if(WSA_IO_INCOMPLETE != GetLastError())
-                            {
-                                //wtf?
-                                closesocket(connectOverlap->socket->socket());
-                                throw(std::runtime_error("Error with connection socket"));
-                            }
-                        }
-                    }
-                    break;
-                default:
-                    {
-                        auto sendOverlap = static_cast<SendOverlap*>(overlap);
-                        sendOverlap->promise.set_value(async_cpp::async::AsyncResult());
-                        delete sendOverlap;
-                    }
-                    break;
+                    delete ioverlap;
                 }
             }
         }
@@ -196,7 +198,7 @@ void Server::waitForEvents()
 }
 
 //------------------------------------------------------------------------------
-void Server::prepareForClientConnection(std::shared_ptr<ConnectOverlap> overlap)
+void Server::prepareForClientConnection(ConnectOverlap& overlap)
 {
     LPFN_ACCEPTEX pfnAcceptEx;
     GUID acceptex_guid = WSAID_ACCEPTEX;
@@ -208,35 +210,38 @@ void Server::prepareForClientConnection(std::shared_ptr<ConnectOverlap> overlap)
     if(SOCKET_ERROR
             == WSAIoctl(mSocket, SIO_GET_EXTENSION_FUNCTION_POINTER,
                     &acceptex_guid, sizeof(acceptex_guid), &pfnAcceptEx, sizeof(pfnAcceptEx),
-                    &bytes, overlap.get(), nullptr))
+                    &bytes, &overlap, 0))
     {
+        int lasterror = WSAGetLastError();
         throw(std::runtime_error("Failed to obtain AcceptEx() pointer"));
     }
 
-    if(!pfnAcceptEx(mSocket, overlap->socket->socket(), overlap->buffer.get(),
-            mInfo.bufferSize() - addrSize,
-            sizeof(SOCKADDR_STORAGE) + 16, sizeof(SOCKADDR_STORAGE) + 16, &overlap->bytesRead,
-            overlap.get()))
+    if(!pfnAcceptEx(mSocket, overlap.socket->socket(), overlap.buffer.get(),
+            0, //mInfo.bufferSize() - addrSize,
+            sizeof(SOCKADDR_STORAGE) + 16, sizeof(SOCKADDR_STORAGE) + 16, &(overlap.bytes),
+            &overlap))
     {
         int lasterror = WSAGetLastError();
 
         if(WSA_IO_PENDING != lasterror)
         {
-            overlap->socket->close();
-            overlap.reset();
+            overlap.socket->close();            
             throw(std::runtime_error("AcceptEx Error()"));
         }
+    }
+    else
+    {
+        overlap.handleConnection();
     }
 }
 
 //------------------------------------------------------------------------------
 std::future<async_cpp::async::AsyncResult> Server::send(std::shared_ptr<utilities::ByteStream> stream)
 {
-    auto overlap = new SendOverlap(stream);
+    auto overlap = new SendOverlap(mSocket, stream);
+    auto future = overlap->promise.get_future();
 
-    DWORD flags = 0;
-    DWORD bytesSent = 0;
-    if(SOCKET_ERROR == WSASend(mSocket, &overlap->wsaBuffer, 1, &bytesSent, flags, overlap, 0))
+    if(SOCKET_ERROR == WSASend(mSocket, &overlap->wsaBuffer, 1, &overlap->bytes, overlap->flags, overlap, 0))
     {
         if(WSA_IO_PENDING != WSAGetLastError())
         {
@@ -245,11 +250,11 @@ std::future<async_cpp::async::AsyncResult> Server::send(std::shared_ptr<utilitie
     }
     else
     {
-        //send completed
-        overlap->promise.set_value(async_cpp::async::AsyncResult());
+        overlap->completeSend(overlap->bytes);
+        delete overlap;
     }
 
-    return overlap->promise.get_future();
+    return future;
 }
 
 }

@@ -53,21 +53,38 @@ public:
 
         SOCKET socket = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, nullptr, 0, 0);
 
+        char sendData[] = "Send data";
+        char recvData[200];
         WSABUF dataBuffer;
-        dataBuffer.buf = 0;
-        dataBuffer.len = 0;
+        dataBuffer.buf = sendData;
+        dataBuffer.len = strlen(sendData);
+        WSABUF recvBuffer;
+        recvBuffer.buf = recvData;
+        recvBuffer.len = 200;
 
-        WSAConnect(socket, results->ai_addr, (int) results->ai_addrlen, &dataBuffer, 0, 0, 0);
+        if(SOCKET_ERROR == WSAConnect(socket, results->ai_addr, (int) results->ai_addrlen, &dataBuffer, &recvBuffer, 0, 0))
+        {
+            int err = WSAGetLastError();
+            throw(std::runtime_error("could not connect"));
+        }
 
         freeaddrinfo(results);
+
+        std::this_thread::sleep_for(std::chrono::seconds(2));
 
         couldConnect = true;
 
         afterConnection(socket);
 
-        WSASendDisconnect(socket, 0);
+        if(SOCKET_ERROR == WSASendDisconnect(socket, 0))
+        {
+            int err = WSAGetLastError();
+            throw(std::runtime_error("could not disconnect"));
+        }
 
         closesocket(socket);
+
+        std::this_thread::sleep_for(std::chrono::seconds(2));
     }
 
     void sendToClient(const std::string& port, std::function<void(SOCKET)> afterSend)

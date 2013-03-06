@@ -19,12 +19,13 @@ class Socket;
 
 //------------------------------------------------------------------------------
 struct IOverlap : public WSAOVERLAPPED {
-    IOverlap(bool isConnect);
+    IOverlap();
     virtual ~IOverlap();
 
-    bool isConnect;
+    virtual bool handleIOCompletion(SOCKET sckt, const size_t nbBytes) = 0;
+
     WSABUF wsaBuffer;
-    DWORD bytesRead;
+    DWORD bytes;
     std::shared_ptr<utilities::ByteStream> stream;
 };
 

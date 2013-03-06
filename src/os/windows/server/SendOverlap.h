@@ -20,10 +20,16 @@ class ServerConnection;
 class SendOverlap : public IOverlap
 {
 public:
-    SendOverlap(std::shared_ptr<utilities::ByteStream> str);
+    SendOverlap(SOCKET sckt, std::shared_ptr<utilities::ByteStream> str);
     ~SendOverlap();
 
+    virtual bool handleIOCompletion(SOCKET sckt, const size_t nbBytes);
+
+    void completeSend(const size_t nbBytes);
+
     std::promise<async_cpp::async::AsyncResult> promise;
+    DWORD flags;
+    SOCKET socket;
 };
 
 }

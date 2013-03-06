@@ -10,7 +10,7 @@ namespace windows {
 namespace server {
 
 //------------------------------------------------------------------------------
-IOverlap::IOverlap(bool cnct) : isConnect(cnct)
+IOverlap::IOverlap() : bytes(0)
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
@@ -18,6 +18,7 @@ IOverlap::IOverlap(bool cnct) : isConnect(cnct)
         sstr << "WSACreateEvent";
         throw(std::runtime_error(sstr.str()));
     }
+    SecureZeroMemory(&wsaBuffer, sizeof(WSABUF));
 }
 
 //------------------------------------------------------------------------------

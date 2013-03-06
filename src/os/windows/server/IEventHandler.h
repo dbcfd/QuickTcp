@@ -15,14 +15,15 @@ namespace os {
 namespace windows {
 namespace server {
 
-class ServerConnection;
+struct ConnectOverlap;
+
 /**
  * Represent a connection between a server and a client. An underlying socket
  * is used for communication between the server and client.
  */
 class IEventHandler {
 public:
-    virtual void disconnected(ServerConnection& cnct) = 0;
+    virtual void queueAccept(ConnectOverlap& overlap) = 0;
     virtual void handleResponse(std::future<async_cpp::async::AsyncResult>& response) = 0;
 };
 
