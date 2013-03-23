@@ -15,10 +15,8 @@
 #include "workers/IManager.h"
 #include "workers/BasicTask.h"
 
-#include <iostream>
-#include <sstream>
-
 #include <assert.h>
+#include <string>
 
 namespace quicktcp {
 namespace os {
@@ -143,8 +141,7 @@ Server::Server(const quicktcp::server::ServerInfo& info,
         }
         catch(std::runtime_error&)
         {
-            //todo logging
-            std::cout << "error building connection " << i << std::endl;
+            mEventHandler->reportError(std::string("Failed to build ConnectOverlap ") + std::to_string(i));
         }
     }
 }
@@ -162,10 +159,9 @@ void Server::createServerSocket()
     hints.ai_protocol = IPPROTO_TCP;
     hints.ai_flags = AI_PASSIVE;
 
-    std::stringstream sstr;
-    sstr << mInfo.port();
+    auto port = std::to_string(mInfo.port());
 
-    int iResult = getaddrinfo("127.0.0.1", sstr.str().c_str(), &hints, &result);
+    int iResult = getaddrinfo("127.0.0.1", port.c_str(), &hints, &result);
 
     if(iResult != 0)
     {
@@ -184,20 +180,19 @@ void Server::createServerSocket()
 
     if(SOCKET_ERROR == iResult)
     {
-        std::stringstream sstr;
-        sstr << "bind Error " << WSAGetLastError();
+        auto error = std::string("Bind error: ") + std::to_string(iResult);
         closesocket(mSocket);
         WSACleanup();
-        throw(std::runtime_error(sstr.str()));
+        throw(std::runtime_error(error));
     }
 
-    if(SOCKET_ERROR == listen(mSocket, mInfo.maxBacklog()))
+    iResult = listen(mSocket, mInfo.maxBacklog());
+    if(SOCKET_ERROR == iResult)
     {
-        std::stringstream sstr;
-        sstr << "listen Error " << WSAGetLastError();
+        auto error = std::string("Listen error: ") + std::to_string(iResult);
         closesocket(mSocket);
         WSACleanup();
-        throw(std::runtime_error(sstr.str()));
+        throw(std::runtime_error(error));
     }
 }
 

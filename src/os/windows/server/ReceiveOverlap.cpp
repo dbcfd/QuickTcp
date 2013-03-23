@@ -6,8 +6,7 @@
 #include "utilities/ByteStream.h"
 
 #include <minwinbase.h>
-#include <iostream>
-#include <sstream>
+#include <string>
 
 namespace quicktcp {
 namespace os {
@@ -64,7 +63,7 @@ void ReceiveOverlap::handleIOCompletion(const size_t nbBytes)
                 int err = WSAGetLastError();
                 if(WSA_IO_INCOMPLETE != err)
                 {
-                    mEventHandler->reportError("Incomplete I/O error when trying to receive");
+                    mEventHandler->reportError(std::string("Incomplete I/O error when trying to receive: ") + std::to_string(err));
                     disconnect();
                 }
             }
@@ -101,9 +100,7 @@ void ReceiveOverlap::prepareToReceive()
 
         if(WSA_IO_PENDING != lastError)
         {
-            std::stringstream sstr;
-            sstr << "Error prepping client socket for receive" << WSAGetLastError();
-            mEventHandler->reportError(sstr.str());
+            mEventHandler->reportError(std::string("Error prepping client for receive: ") + std::to_string(lastError));
             disconnect();
         }
     }

@@ -4,8 +4,6 @@
 
 #include "utilities/ByteStream.h"
 
-#include <sstream>
-
 namespace quicktcp {
 namespace os {
 namespace windows {

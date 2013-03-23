@@ -5,8 +5,7 @@
 #include "os/windows/server/Socket.h"
 
 #include <minwinbase.h>
-#include <iostream>
-#include <sstream>
+#include <string>
 
 namespace quicktcp {
 namespace os {
@@ -21,8 +20,8 @@ ConnectOverlap::ConnectOverlap(std::shared_ptr<Socket> sckt,
 {
     if(mainIOCP != CreateIoCompletionPort((HANDLE)mSocket->socket(), mainIOCP, (ULONG_PTR)this, 0))
     {
-        int err = WSAGetLastError();
-        throw(std::runtime_error("Io completion port error"));
+        auto error = std::string("CreateIoCompletionPort Error: ") + std::to_string(WSAGetLastError());
+        throw(std::runtime_error(error));
     }
 }
 
@@ -58,7 +57,7 @@ void ConnectOverlap::handleIOCompletion(const size_t nbBytes)
             int err = WSAGetLastError();
             if(WSA_IO_INCOMPLETE != err)
             {
-                mEventHandler->reportError("Incomplete I/O Error when waiting for connection");
+                mEventHandler->reportError(std::string("Incomplete I/O Error when waiting for connection") + std::to_string(err));
             }
             else
             {

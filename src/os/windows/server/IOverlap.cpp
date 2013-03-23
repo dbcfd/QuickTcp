@@ -3,7 +3,6 @@
 #include "utilities/ByteStream.h"
 
 #include <assert.h>
-#include <sstream>
 
 namespace quicktcp {
 namespace os {
@@ -16,9 +15,7 @@ IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<IEventHandler> 
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
-        std::stringstream sstr;
-        sstr << "WSACreateEvent";
-        throw(std::runtime_error(sstr.str()));
+        throw(std::runtime_error("WSACreateEvent"));
     }
     SecureZeroMemory(&mWsaBuffer, sizeof(WSABUF));
     mBuffer = std::shared_ptr<char>(new char[bufferSize]);
@@ -33,9 +30,7 @@ IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<IEventHandler> 
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
-        std::stringstream sstr;
-        sstr << "WSACreateEvent";
-        throw(std::runtime_error(sstr.str()));
+        throw(std::runtime_error("WSACreateEvent"));
     }
     SecureZeroMemory(&mWsaBuffer, sizeof(WSABUF));
     mBuffer = std::shared_ptr<char>(new char[stream->size()]);
