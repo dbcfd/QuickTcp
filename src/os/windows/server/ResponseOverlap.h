@@ -3,28 +3,32 @@
 #include "os/windows/server/Platform.h"
 #include "os/windows/server/IOverlap.h"
 
+#include "async/AsyncResult.h"
+
+#include <functional>
+
 namespace quicktcp {
+
+namespace server {
+class IResponder;
+}
+
 namespace os {
 namespace windows {
 namespace server {
 
 class IEventHandler;
-class Socket;
+class ServerConnection;
 
 //------------------------------------------------------------------------------
-class SendOverlap : public IOverlap
-{
-public:
-    SendOverlap(std::shared_ptr<Socket> sckt, 
-        std::shared_ptr<IEventHandler> evHandler,
-        std::shared_ptr<utilities::ByteStream> stream);
-    ~SendOverlap();
+struct ResponseOverlap : public IOverlap {
+    ResponseOverlap(std::shared_ptr<Socket> sckt, 
+        std::shared_ptr<IEventHandler> evHandler);
+    virtual ~ResponseOverlap();
 
     virtual void handleIOCompletion(const size_t nbBytes);
 
-    void completeSend();
-
-    size_t mExpectedSize;
+    async_cpp::async::AsyncResult mResult;
 };
 
 //Inline Implementations

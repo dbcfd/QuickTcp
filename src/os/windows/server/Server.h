@@ -45,12 +45,14 @@ public:
     virtual void shutdown();
     virtual void waitForEvents();
 
-    std::future<async_cpp::async::AsyncResult> send(SOCKET sckt, std::shared_ptr<utilities::ByteStream> stream); 
+    void send(std::shared_ptr<Socket> sckt, std::shared_ptr<utilities::ByteStream> stream); 
 
     /**
      * Create the asynchronous socket and functionality necessary for AcceptEx
      */
     void prepareForClientConnection(ConnectOverlap& overlap);
+
+    inline HANDLE getIOCompletionPort() const;
 
 private:
     /**
@@ -70,6 +72,13 @@ private:
     std::vector<std::shared_ptr<ConnectOverlap>> mOverlaps;
     std::condition_variable mShutdownSignal;
 };
+
+//inline implementations
+//------------------------------------------------------------------------------
+HANDLE Server::getIOCompletionPort() const
+{
+    return mIOCP;
+}
 
 }
 }

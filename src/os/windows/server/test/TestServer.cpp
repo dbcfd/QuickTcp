@@ -20,7 +20,7 @@ using namespace quicktcp;
 class MockClient
 {
 public:
-    MockClient() : couldConnect(false)
+    MockClient(const std::chrono::system_clock::duration& dur) : couldConnect(false), waitDuration(dur)
     {
         WSAData wsaData;
         int iResult;
@@ -70,7 +70,7 @@ public:
 
         freeaddrinfo(results);
 
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::this_thread::sleep_for(waitDuration);
 
         couldConnect = true;
 
@@ -84,12 +84,12 @@ public:
 
         closesocket(socket);
 
-        std::this_thread::sleep_for(std::chrono::seconds(2));
+        std::this_thread::sleep_for(waitDuration);
     }
 
     void sendToServer(const std::string& port, std::function<void(SOCKET)> afterSend)
     {
-        connect(port, [afterSend](SOCKET socket)->void {
+        connect(port, [this, afterSend](SOCKET socket)->void {
             char buffer[] = "Data sent to server";
             int len = strlen(buffer);
             int flags = 0;
@@ -97,17 +97,17 @@ public:
             {
                 throw(std::runtime_error("send failed"));
             }
-            std::this_thread::sleep_for(std::chrono::seconds(2)); //wait for our send to actually go
+            std::this_thread::sleep_for(waitDuration); //wait for our send to actually go
             afterSend(socket);
         } );
     }
 
     void sendAndReceive(const std::string& port)
     {
-        sendToServer(port, [](SOCKET socket)->void {
-            char buffer[200];
+        memset(recvBuffer, 0, sizeof(recvBuffer));
+        sendToServer(port, [this](SOCKET socket)->void {
             int flags = 0;
-            if(SOCKET_ERROR == recv(socket, buffer, 200, flags))
+            if(SOCKET_ERROR == recv(socket, recvBuffer, sizeof(recvBuffer), flags))
             {
                 throw(std::runtime_error("recv failed"));
             }
@@ -115,6 +115,8 @@ public:
     }
 
     bool couldConnect;
+    std::chrono::system_clock::duration waitDuration;
+    char recvBuffer[200];
 };
 
 class Responder : public server::IResponder
@@ -122,21 +124,25 @@ class Responder : public server::IResponder
 public:
     Responder() : clientDisconnected(false), attemptedResponse(false), hadResponseError(false) {}
 
-    virtual std::future<async_cpp::async::AsyncResult> respond(std::shared_ptr<utilities::ByteStream> stream)
+    virtual bool authenticateConnection(std::shared_ptr<utilities::ByteStream> stream)
+    {
+        return true;
+    }
+
+    virtual async_cpp::async::AsyncResult respond(std::shared_ptr<utilities::ByteStream> stream)
     {
         attemptedResponse = true;
         std::string result("response from server");
         stream = std::shared_ptr<utilities::ByteStream>(new utilities::ByteStream((void*)&result[0], result.size()));
-        promise.set_value(async_cpp::async::AsyncResult(stream));
-        return promise.get_future();
+        return async_cpp::async::AsyncResult(stream);
     }
 
-    virtual void connectionClosed()
+    virtual void handleConnectionClosed()
     {
         clientDisconnected = true;
     }
 
-    virtual void responseError(async_cpp::async::AsyncResult& result)
+    virtual void handleErrorSendingResponse(async_cpp::async::AsyncResult& result)
     {
         hadResponseError = true;
     }
@@ -190,7 +196,7 @@ TEST_F(ServerTest, ACCEPT_CONNECTION)
         server.waitForEvents();
     } );
 
-    MockClient client;
+    MockClient client(std::chrono::milliseconds(10));
 
     ASSERT_NO_THROW(client.connect(port, [](SOCKET) {}));
 
@@ -211,7 +217,7 @@ TEST_F(ServerTest, ACCEPT_CONNECTION_SEND)
         server.waitForEvents();
     } );
 
-    MockClient client;
+    MockClient client(std::chrono::milliseconds(10));
 
     ASSERT_NO_THROW(client.sendToServer(port, [&client](SOCKET) {} ) );
 
@@ -225,3 +231,26 @@ TEST_F(ServerTest, ACCEPT_CONNECTION_SEND)
     thread.join();
 }
 
+TEST_F(ServerTest, ACCEPT_CONNECTION_SEND_RECEIVE)
+{
+    Server server(serverInfo, manager, responder);
+
+    std::thread thread([&server]()->void {
+        server.waitForEvents();
+    } );
+
+    MockClient client(std::chrono::milliseconds(10));
+
+    ASSERT_NO_THROW(client.sendAndReceive(port));
+
+    ASSERT_TRUE(client.couldConnect);
+
+    ASSERT_TRUE(responder->clientDisconnected);
+    ASSERT_TRUE(responder->attemptedResponse);
+
+    ASSERT_NO_THROW(server.shutdown());
+
+    ASSERT_STREQ("response from server", client.recvBuffer);
+
+    thread.join();
+}

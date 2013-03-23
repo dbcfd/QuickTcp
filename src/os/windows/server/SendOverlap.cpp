@@ -1,4 +1,6 @@
 #include "os/windows/server/SendOverlap.h"
+#include "os/windows/server/IEventHandler.h"
+#include "os/windows/server/Socket.h"
 
 #include "utilities/ByteStream.h"
 
@@ -10,12 +12,11 @@ namespace windows {
 namespace server {
 
 //------------------------------------------------------------------------------
-SendOverlap::SendOverlap(SOCKET sckt, std::shared_ptr<utilities::ByteStream> str) : IOverlap(), socket(sckt)
+SendOverlap::SendOverlap(std::shared_ptr<Socket> sckt, 
+        std::shared_ptr<IEventHandler> evHandler,
+        std::shared_ptr<utilities::ByteStream> stream) : IOverlap(sckt, evHandler, stream), mExpectedSize(stream->size())
 {
-    sendComplete = false;
-    stream = str;
-    wsaBuffer.buf = (char*)str->buffer();
-    wsaBuffer.len = str->size();
+
 }
 
 //------------------------------------------------------------------------------
@@ -25,44 +26,42 @@ SendOverlap::~SendOverlap()
 }
 
 //------------------------------------------------------------------------------
-bool SendOverlap::handleIOCompletion(SOCKET sckt, const size_t nbBytes)
+void SendOverlap::handleIOCompletion(const size_t nbBytes)
 {
-    flags = 0;
-    bool ret = true;
-    DWORD bytesSent = 0;
-    if(WSAGetOverlappedResult(socket, this, &bytesSent, FALSE, &flags))
+    if(hasOpenEvent())
     {
-        bytes += bytesSent;
-        completeSend(bytes);
-    }
-    else
-    {
-        //i/o wasn't complete, see if it was due to error or buffer fulle
-        int err = WSAGetLastError();
-        if(WSA_IO_INCOMPLETE == err)
+        mBytes += nbBytes;
+        mFlags = 0;
+        DWORD bytesSent = 0;
+        if(WSAGetOverlappedResult(mSocket->socket(), this, &bytesSent, FALSE, &mFlags))
         {
-            ret = false;
-            bytes += nbBytes;
-        }
-    }
-    return ret;
-}
-
-//------------------------------------------------------------------------------
-void SendOverlap::completeSend(const size_t nbBytes)
-{
-    bool sendAlreadyComplete = sendComplete.exchange(true);
-    if(!sendAlreadyComplete)
-    {
-        if(stream->size() != nbBytes)
-        {
-            promise.set_value(async_cpp::async::AsyncResult("Failed to send all bytes"));
+            mBytes += bytesSent;
+            completeSend();
         }
         else
         {
-            promise.set_value(async_cpp::async::AsyncResult());
-        }
+            //i/o wasn't complete, see if it was due to error or buffer fulle
+            int err = WSAGetLastError();
+            if(WSA_IO_INCOMPLETE == err)
+            {
+                mBytes += nbBytes;
+            }
+            else
+            {
+                completeSend();
+            }
+        }    
     }
+}
+
+//------------------------------------------------------------------------------
+void SendOverlap::completeSend()
+{
+    if(mExpectedSize != mBytes)
+    {
+        mEventHandler->reportError("Failed to send all bytes");
+    }
+    closeEvent();
 }
 
 }

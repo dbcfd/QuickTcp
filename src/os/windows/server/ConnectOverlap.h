@@ -17,29 +17,27 @@ namespace windows {
 namespace server {
 
 class IEventHandler;
-class ServerConnection;
+struct ReceiveOverlap;
 
 //------------------------------------------------------------------------------
 struct ConnectOverlap : public IOverlap {
-    ConnectOverlap(HANDLE mainIOCP, 
-        std::shared_ptr<IEventHandler> evHandler, std::shared_ptr<quicktcp::server::IResponder> responder,
-        std::shared_ptr<Socket> sckt, const size_t bufferSize);
+    ConnectOverlap(std::shared_ptr<Socket> sckt, 
+        std::shared_ptr<IEventHandler> evHandler,
+        HANDLE mainIOCP);
     virtual ~ConnectOverlap();
 
-    virtual bool handleIOCompletion(SOCKET sckt, const size_t nbBytes);
+    virtual void handleIOCompletion(const size_t nbBytes);
 
     void reset();
     void handleConnection();
-    void transferBufferToStream(const size_t nbBytes);
-    void prepareToReceive();
 
-    std::atomic_bool isConnected;
-    std::shared_ptr<char> buffer;
-    std::shared_ptr<Socket> socket;
-    std::shared_ptr<IEventHandler> eventHandler;
-    std::shared_ptr<quicktcp::server::IResponder> responder;
-    DWORD flags;
+private:
+    ReceiveOverlap* mReceiver;
+    bool mPendingDisconnect;
 };
+
+//Inline Implementations
+//------------------------------------------------------------------------------
 
 }
 }

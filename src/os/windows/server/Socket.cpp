@@ -1,4 +1,6 @@
-#include "os/windows/Server/Socket.h"
+#include "os/windows/server/Socket.h"
+#include "os/windows/server/IOverlap.h"
+#include "os/windows/server/IEventHandler.h"
 
 namespace quicktcp {
 namespace os {
@@ -47,27 +49,27 @@ Socket::~Socket()
 }
 
 //------------------------------------------------------------------------------
-void Socket::disconnect(WSAOVERLAPPED& overlap)
+void Socket::disconnect(IOverlap* overlap)
 {
     LPFN_DISCONNECTEX pfn;
     GUID guid = WSAID_DISCONNECTEX;
     DWORD bytes = 0;
 
     //use i/o control to set up the socket for accept ex
-    if(SOCKET_ERROR == WSAIoctl(mSocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid), &pfn, sizeof(pfn), &bytes, &overlap, nullptr))
+    if(SOCKET_ERROR == WSAIoctl(mSocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid), &pfn, sizeof(pfn), &bytes, overlap, nullptr))
     {
         throw(std::runtime_error("Failed to obtain DisconnectEx() pointer"));
     }
 
     DWORD flags = TF_REUSE_SOCKET;
-    if(!pfn(mSocket, &overlap, flags, 0))
+    if(!pfn(mSocket, overlap, flags, 0))
     {
         int lasterror = WSAGetLastError();
 
         if(WSA_IO_PENDING != lasterror)
         {
             close();
-            throw(std::runtime_error("DisconnectEx Error()"));
+            overlap->mEventHandler->reportError("DisconnectEx Error()");
         }
     }
 }
