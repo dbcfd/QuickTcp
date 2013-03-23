@@ -222,9 +222,10 @@ void Server::shutdown()
             overlap->closeEvent();
             overlap->mSocket->close();
         }
-        WSACleanup();
         mManager->waitForTasksToComplete();
+        CloseHandle(mIOCP);
         mOverlaps.clear();
+        WSACleanup();
         mShutdownSignal.notify_all();
     }
 }
@@ -249,7 +250,7 @@ void Server::waitForEvents()
                 }
             }
         }
-    }
+    }   
 }
 
 //------------------------------------------------------------------------------

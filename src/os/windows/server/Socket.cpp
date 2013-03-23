@@ -32,14 +32,8 @@ Socket::Socket()
     // than disabling the receive buffer.
     //
     int nZero = 0;
-    int nRet = setsockopt(mSocket, SOL_SOCKET, SO_SNDBUF, (char*) &nZero, sizeof(nZero));
-
-    if(nRet == SOCKET_ERROR)
-    {
-        //TODO: log
-    }
-
-    nRet = setsockopt(mSocket, SOL_SOCKET, SO_RCVBUF, (char*) &nZero, sizeof(nZero));
+    setsockopt(mSocket, SOL_SOCKET, SO_SNDBUF, (char*) &nZero, sizeof(nZero));
+    setsockopt(mSocket, SOL_SOCKET, SO_RCVBUF, (char*) &nZero, sizeof(nZero));
 }
 
 //------------------------------------------------------------------------------
