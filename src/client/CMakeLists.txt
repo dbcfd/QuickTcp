@@ -4,7 +4,9 @@ file(GLOB HEADERS "*.h")
 
 file(GLOB SOURCES "*.cpp")
 
-SET (DEPENDENCIES Utilities)
+set(async.cpp_VERSION 0.5.0)
+find_package(async.cpp REQUIRED)
+SET (DEPENDENCIES ${ASYNC.CPP_LIBRARIES} Utilities)
 
 add_library (${TARGET} ${LIBRARY_BUILD_TYPE} ${HEADERS} ${SOURCES}) 
 target_link_libraries (${TARGET} ${DEPENDENCIES})

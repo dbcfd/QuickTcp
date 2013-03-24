@@ -4,16 +4,12 @@ namespace quicktcp {
 namespace client {
 
 //------------------------------------------------------------------------------
-IClient::IClient(const ServerInfo& info, std::shared_ptr<IListener> listener)
-    : mInfo(info), mListener(listener)
+IClient::IClient(const ServerInfo& info, 
+        std::shared_ptr<utilities::ByteStream> authentication, 
+        const size_t bufferSize)
+    : mInfo(info), mAuthentication(authentication), mBufferSize(bufferSize)
 {
 
-}
-
-//------------------------------------------------------------------------------
-void IClient::sendDataToListener(std::shared_ptr<utilities::ByteStream> stream)
-{
-    mListener->receive(stream);
 }
 
 }

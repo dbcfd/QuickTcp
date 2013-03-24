@@ -5,6 +5,7 @@
 
 #include <future>
 #include <memory>
+#include <thread>
 
 namespace async_cpp {
 namespace async {
@@ -22,23 +23,17 @@ namespace client {
 
 class CLIENT_API IClient {
 public:
-    class IListener 
-    {
-    public:
-        virtual void receive(std::shared_ptr<utilities::ByteStream> stream) = 0;
-        virtual void serverDisconnected() = 0;
-    };
+    IClient(const ServerInfo& info, 
+        std::shared_ptr<utilities::ByteStream> authentication, 
+        const size_t bufferSize);
 
-    IClient(const ServerInfo& info, std::shared_ptr<IListener> listener);
-
-    virtual std::future<async_cpp::async::AsyncResult> send(std::shared_ptr<utilities::ByteStream> stream) = 0;
+    virtual std::future<async_cpp::async::AsyncResult> request(std::shared_ptr<utilities::ByteStream> stream) = 0;
     virtual void disconnect() = 0;
-    virtual void waitForEvents() = 0;
-
-    void sendDataToListener(std::shared_ptr<utilities::ByteStream> stream);
 
 protected:
-    std::shared_ptr<IListener> mListener;
+    std::shared_ptr<utilities::ByteStream> mAuthentication;
+    size_t mBufferSize;
+    std::thread mThread;
     ServerInfo mInfo;
 };
 

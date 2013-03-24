@@ -1,17 +1,10 @@
 #include "os/windows/client/Socket.h"
-
-#include <sstream>
+#include "os/windows/client/IOverlap.h"
 
 namespace quicktcp {
 namespace os {
 namespace windows {
 namespace client {
-
-//------------------------------------------------------------------------------
-Socket::Socket(const SOCKET _sckt) : mSocket(_sckt)
-{
-
-}
 
 //------------------------------------------------------------------------------
 Socket::Socket()
@@ -21,9 +14,7 @@ Socket::Socket()
 
     if(mSocket == INVALID_SOCKET)
     {
-        std::stringstream sstr;
-        sstr << "Socket Creation Error " << WSAGetLastError();
-        throw(std::runtime_error(sstr.str()));
+        throw(std::runtime_error("Socket Creation Error"));
     }
 
     //
@@ -40,26 +31,14 @@ Socket::Socket()
     // than disabling the receive buffer.
     //
     int nZero = 0;
-    int nRet = setsockopt(mSocket, SOL_SOCKET, SO_SNDBUF, (char*) &nZero, sizeof(nZero));
-
-    if(nRet == SOCKET_ERROR)
-    {
-        std::stringstream sstr;
-        sstr << "setsockopt(SNDBUF) failed:" << WSAGetLastError();
-        //TODO: log
-    }
+    setsockopt(mSocket, SOL_SOCKET, SO_SNDBUF, (char*) &nZero, sizeof(nZero));
+    setsockopt(mSocket, SOL_SOCKET, SO_RCVBUF, (char*) &nZero, sizeof(nZero));
 }
 
 //------------------------------------------------------------------------------
 Socket::~Socket()
 {
 
-}
-
-//------------------------------------------------------------------------------
-void Socket::closeSocket()
-{
-    closesocket(mSocket);
 }
 
 }

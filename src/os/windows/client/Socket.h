@@ -12,7 +12,7 @@ namespace client {
  * Wrapper around the underlying Winsock2 socket implementation, which maintains
  * a network connection to some other device.
  */
-class WINDOWSCLIENT_API Socket
+class Socket
 {
 public:
     enum SocketState
@@ -23,29 +23,35 @@ public:
      * Create a socket, using next available socket, setting appropriate attribution.
      */
     Socket();
-    /**
-     * Provide a wrapper around an existing socket. This allows us to use wrapper functionality
-     * on a socket that may have been created in another method (e.g. accept)
-     */
-    Socket(const SOCKET sckt);
-    ~Socket();
-    /**
-     * Close the underlying Winsock2 socket
-     */
-    void closeSocket();
 
-    inline SOCKET getSocket() const;
+    ~Socket();
+
+    inline void close();
+    inline SOCKET socket() const;
+    inline bool isValid() const;
 
 private:
-
     SOCKET mSocket;
 };
 
-//inline implementations
+//Inline Implementations
 //------------------------------------------------------------------------------
-SOCKET Socket::getSocket() const
+void Socket::close()
+{
+    closesocket(mSocket);
+    mSocket = INVALID_SOCKET;
+}
+
+//------------------------------------------------------------------------------
+SOCKET Socket::socket() const
 {
     return mSocket;
+}
+
+//------------------------------------------------------------------------------
+bool Socket::isValid() const
+{
+    return (mSocket != INVALID_SOCKET);
 }
 
 }

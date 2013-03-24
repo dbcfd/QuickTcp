@@ -50,123 +50,68 @@ public:
 
         if(SOCKET_ERROR == iResult)
         {
-            std::stringstream sstr;
-            sstr << "listen Error " << WSAGetLastError();
+            auto error = std::string("Listen Error: ") + std::to_string(WSAGetLastError());            
             WSACleanup();
-            throw(std::runtime_error(sstr.str()));
+            throw(std::runtime_error(error));
         }
 
         if(SOCKET_ERROR == listen(serverSocket, 2))
         {
-            std::stringstream sstr;
-            sstr << "listen Error " << WSAGetLastError();
+            auto error = std::string("Listen Error: ") + std::to_string(WSAGetLastError());            
             closesocket(serverSocket);
             WSACleanup();
-            throw(std::runtime_error(sstr.str()));
+            throw(std::runtime_error(error));
         }
-
-        buffer.buf = (char*)malloc(sizeof(char) * 2000);
-        buffer.len = 0;
     }
 
-    void connect()
+    void connect(std::function<void(SOCKET)> postConnect = [](SOCKET){})
     {
-        thread = std::shared_ptr<std::thread>(new std::thread([this]()-> void {
-            auto connectedSocket = accept(serverSocket, 0, 0 );
-            wasError = (INVALID_SOCKET == connectedSocket);
-            closesocket(connectedSocket);
-        } ) );
+        connectedSocket = accept(serverSocket, 0, 0 );
+        wasError = (INVALID_SOCKET == connectedSocket);
+
+        if(!wasError)
+        {
+            postConnect(connectedSocket);
+        }
+        closesocket(connectedSocket);
     }
 
-    void receive(std::function<void(SOCKET)> postReceive = [](SOCKET){}) {
-        thread = std::shared_ptr<std::thread>(new std::thread([this, postReceive]()-> void {
-            SOCKET connectedSocket = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, nullptr, 0, WSA_FLAG_OVERLAPPED);
-            DWORD bytesReceived = 0;
-            DWORD flags = 0;
-            WSAOVERLAPPED overlap;
-            SecureZeroMemory((PVOID) & overlap, sizeof (WSAOVERLAPPED));
-            overlap.hEvent = WSACreateEvent();
-            wasError = (TRUE == AcceptEx(serverSocket, connectedSocket, 0, 0, sizeof(SOCKADDR_STORAGE) + 16, sizeof(SOCKADDR_STORAGE) + 16, &bytesReceived, &overlap));
-            if(wasError) return;
-            setsockopt(connectedSocket, SO_UPDATE_ACCEPT_CONTEXT);
-            int rc = WSARecv(connectedSocket, &buffer, 1, &bytesReceived, &flags, &overlap, 0);
-            if(rc == SOCKET_ERROR && WSA_IO_PENDING != WSAGetLastError())
+    void receive(std::function<void(SOCKET)> postReceive = [](SOCKET){}) 
+    {
+        connect([this, postReceive](SOCKET sckt)-> void {
+            char recvBuff[200];
+            memset(recvBuff, 0, sizeof(recvBuff));
+            auto bytesReceived = recv(sckt, recvBuff, sizeof(recvBuff), 0);
+            if(0 == bytesReceived)
             {
-                std::stringstream sstr;
-                sstr << "recv error:" << WSAGetLastError();
                 wasError = true;
             }
             else
             {
-                rc = WSAWaitForMultipleEvents(1, &overlap.hEvent, TRUE, WSA_INFINITE, TRUE);
-                if(WSA_WAIT_FAILED == rc)
-                {
-                    std::stringstream sstr;
-                    sstr << "wait error:" << WSAGetLastError();
-                    wasError = true;
-                }
-
-                DWORD flags = 0;
-                rc = WSAGetOverlappedResult(connectedSocket, &overlap, &bytesReceived, FALSE, &flags);
-                if(0 == rc)
-                {
-                    std::stringstream sstr;
-                    sstr << "get error:" << WSAGetLastError();
-                    wasError = true;
-                }
-                else
-                {
-                    stream = std::shared_ptr<utilities::ByteStream>(new utilities::ByteStream(buffer.buf, bytesReceived));
-                }
+                postReceive(sckt);
             }
-            postReceive(connectedSocket);
-            closesocket(connectedSocket);
-        } ) );
+        } );
     }
 
     void receiveAndRespond() 
     {
-        receive([this](SOCKET socket)->void {
+        receive([this](SOCKET sckt)->void {
             char respBuffer[] = "Server Response";
-            buffer.buf = respBuffer;
-            buffer.len = strlen(respBuffer);
-            DWORD flags = 0;
-            wasError = (SOCKET_ERROR == WSASend(socket, &buffer, 1, &buffer.len, flags, 0, 0));
+            auto bytesSent = send(sckt, respBuffer, sizeof(respBuffer), 0);
+            wasError = (bytesSent != sizeof(respBuffer));
         } );
     }
 
     ~MockServer()
     {
-        free(buffer.buf);
         closesocket(serverSocket);
+        WSACleanup();
     }
 
+    SOCKET connectedSocket;
     SOCKET serverSocket;
-    WSABUF buffer;
-    std::shared_ptr<utilities::ByteStream> stream;
-    std::shared_ptr<std::thread> thread;
+    char buffer[200];
     bool wasError;
-};
-
-class Listener : public client::IClient::IListener {
-public:
-    Listener() 
-    {
-        future = promise.get_future();
-    }
-
-    virtual void receive(std::shared_ptr<utilities::ByteStream> stream)
-    {
-        promise.set_value(async_cpp::async::AsyncResult(stream));
-    }
-
-    virtual void serverDisconnected()
-    {
-
-    }
-
-    std::future<async_cpp::async::AsyncResult> future;
-    std::promise<async_cpp::async::AsyncResult> promise;
 };
 
 using namespace os::windows::client;
@@ -180,9 +125,7 @@ public :
 
     virtual void SetUp()
     {
-        manager = std::shared_ptr<async_cpp::workers::IManager>(new async_cpp::workers::Manager(2));
         server = std::shared_ptr<MockServer>(new MockServer("4567"));
-        listener = std::shared_ptr<Listener>(new Listener());
     }
 
     virtual void TearDown()
@@ -191,43 +134,79 @@ public :
     }
 
     std::shared_ptr<MockServer> server;
-    std::shared_ptr<async_cpp::workers::IManager> manager;
-    std::shared_ptr<Listener> listener;
     client::ServerInfo serverInfo;
 };
 
 TEST_F(ClientTest, CONSTRUCTOR)
 {
-    server->connect();
-    std::shared_ptr<Client> client;
-    ASSERT_NO_THROW(Client(manager, serverInfo, listener, 2048));
-    server->thread->join();
+    std::thread thread([this]()->void {
+        server->connect();
+    } );
+    //let server start
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    ASSERT_NO_THROW(Client(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048));
+    thread.join();
     ASSERT_FALSE(server->wasError);
 }
 
 TEST_F(ClientTest, SEND)
 {
-    std::shared_ptr<Client> client;
-    server->receive();
-    ASSERT_NO_THROW(client = std::shared_ptr<Client>(new Client(manager, serverInfo, listener, 2048)));
-    std::string send("send to server");
-    std::shared_ptr<utilities::ByteStream> stream(new utilities::ByteStream(&send[0], send.size()));
-    ASSERT_FALSE(client->send(stream).get().wasError());
-    //client->waitForEvents();
-    server->thread->join();
-    ASSERT_FALSE(server->wasError);
-    ASSERT_STREQ(send.c_str(), (char*)server->stream->buffer());
+    {
+        bool successfulReceive = false;
+        std::thread thread([this, &successfulReceive]()->void {
+            server->receive([&successfulReceive](SOCKET) -> void {
+                successfulReceive = true;
+            } );
+        } );
+        //let server start
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::shared_ptr<Client> client;
+        ASSERT_NO_THROW(client = std::shared_ptr<Client>(new Client(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048)));
+        //let client have a chance to see if it triggers a send with no data
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        ASSERT_FALSE(successfulReceive);
+        client.reset(); //close the client, which should stop the receive
+        thread.join();
+        ASSERT_TRUE(server->wasError); //no bytes received, server will flag error
+        ASSERT_FALSE(successfulReceive);
+    }
+
+    {
+        bool successfulReceive = false;
+        std::thread thread([this, &successfulReceive]()->void {
+            server->receive([&successfulReceive](SOCKET) -> void {
+                successfulReceive = true;
+            } );
+        } );
+        //let server start
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        std::shared_ptr<Client> client;
+        ASSERT_NO_THROW(client = std::shared_ptr<Client>(new Client(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048)));
+        char sendBuf[] = "Sending to server";
+        std::shared_ptr<utilities::ByteStream> stream(new utilities::ByteStream(sendBuf, sizeof(sendBuf)));
+        ASSERT_NO_THROW(client->request(stream));
+        thread.join();
+        ASSERT_FALSE(server->wasError);
+        ASSERT_TRUE(successfulReceive);
+    }
 }
 
 TEST_F(ClientTest, SEND_RECEIVE)
 {
+    std::thread thread([this]()->void {
+        server->receiveAndRespond();
+    } );
+    //let server start
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
     std::shared_ptr<Client> client;
-    server->receiveAndRespond();
-    ASSERT_NO_THROW(client = std::shared_ptr<Client>(new Client(manager, serverInfo, listener, 2048)));
-    std::string send("send to server");
-    std::shared_ptr<utilities::ByteStream> stream(new utilities::ByteStream(&send[0], send.size()));
-    ASSERT_FALSE(client->send(stream).get().wasError());
-    auto result = listener->future.get();
-    ASSERT_FALSE(result.wasError());
-    ASSERT_STREQ("Server Response", (char*)std::static_pointer_cast<utilities::ByteStream>(result.result())->buffer());
+    ASSERT_NO_THROW(client = std::shared_ptr<Client>(new Client(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048)));
+    char sendBuf[] = "Sending to server";
+    std::shared_ptr<utilities::ByteStream> stream(new utilities::ByteStream(sendBuf, sizeof(sendBuf)));
+    async_cpp::async::AsyncResult result;
+    ASSERT_NO_THROW(result = client->request(stream).get());
+    ASSERT_FALSE(server->wasError);
+    ASSERT_NO_THROW(result.throwIfError());
+    auto responseStream = std::static_pointer_cast<utilities::ByteStream>(result.result());
+    ASSERT_STREQ("Server Response", (const char*)responseStream->buffer());
+    thread.join();
 }

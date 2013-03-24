@@ -1,7 +1,7 @@
 #include "client/IClient.h"
 #include "client/ServerInfo.h"
 
-#include "workers/Manager.h"
+#include "async/AsyncResult.h"
 
 #pragma warning(disable:4251 4275)
 #include <gtest/gtest.h>
@@ -24,8 +24,10 @@ TEST(CLIENT_TEST, SERVER_INFO)
 class MockClient : public IClient
 {
 public:
-    MockClient(std::shared_ptr<workers::Manager> manager, const ServerInfo& info, std::function<void(std::shared_ptr<utilities::ByteStream>)> onReceive)
-        : IClient(manager, info, onReceive), isConnected(false)
+    MockClient(const ServerInfo& info, 
+        std::shared_ptr<utilities::ByteStream> authentication, 
+        const size_t bufferSize)
+        : IClient(info, authentication, bufferSize), isConnected(false)
     {
         isConnected = true;
     }
@@ -37,26 +39,25 @@ public:
 
     bool isConnected;
 
-protected:
-    virtual void performSend(std::unique_ptr<std::promise<SendResult>> responsePromise, std::shared_ptr<utilities::ByteStream> stream)
+    virtual std::future<async_cpp::async::AsyncResult> request(std::shared_ptr<utilities::ByteStream> stream)
     {
-        responsePromise->set_value(SendResult());
+        std::promise<async_cpp::async::AsyncResult> promise;
+        promise.set_value(async_cpp::async::AsyncResult(std::shared_ptr<void>(new bool(true))));
+        return promise.get_future();
     }
 };
 
 
 TEST(CLIENT_TEST, CLIENT)
 {
-    std::shared_ptr<workers::Manager> manager(new workers::Manager(1));
-    std::shared_ptr<MockClient> client(new MockClient(manager, ServerInfo("localhost", 8080), [](std::shared_ptr<utilities::ByteStream>){}));
+    std::shared_ptr<MockClient> client(new MockClient(ServerInfo("localhost", 8080), std::shared_ptr<utilities::ByteStream>(), 100));
 
     EXPECT_TRUE(client->isConnected);
 
-    std::future<IClient::SendResult> res;
+    std::future<async_cpp::async::AsyncResult> res;
+    EXPECT_NO_THROW(res = client->request(std::shared_ptr<utilities::ByteStream>()));
 
-    EXPECT_NO_THROW(res = client->send(std::shared_ptr<utilities::ByteStream>()));
-
-    EXPECT_NO_THROW(res.get().check());
+    EXPECT_NO_THROW(res.get().throwIfError());
 
     client->disconnect();
 
