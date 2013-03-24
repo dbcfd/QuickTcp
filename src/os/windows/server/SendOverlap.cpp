@@ -28,7 +28,6 @@ void SendOverlap::handleIOCompletion(const size_t nbBytes)
 {
     if(hasOpenEvent())
     {
-        mBytes += nbBytes;
         mFlags = 0;
         DWORD bytesSent = 0;
         if(WSAGetOverlappedResult(mSocket->socket(), this, &bytesSent, FALSE, &mFlags))
@@ -42,7 +41,7 @@ void SendOverlap::handleIOCompletion(const size_t nbBytes)
             int err = WSAGetLastError();
             if(WSA_IO_INCOMPLETE == err)
             {
-                mBytes += nbBytes;
+                mBytes += bytesSent;
             }
             else
             {
