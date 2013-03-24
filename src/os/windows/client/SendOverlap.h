@@ -22,7 +22,7 @@ class SendOverlap : public IOverlap
 public:
     SendOverlap(std::shared_ptr<Socket> sckt, 
         std::shared_ptr<utilities::ByteStream> stream,
-        const size_t receiveBufferSize);
+        std::shared_ptr<IEventHandler> handler);
     ~SendOverlap();
 
     virtual void handleIOCompletion(const size_t nbBytes);
@@ -31,7 +31,6 @@ public:
     void shutdown(const std::string& message);
 
     std::promise<async_cpp::async::AsyncResult> mPromise;
-    size_t mReceiveBufferSize;
 
 };
 

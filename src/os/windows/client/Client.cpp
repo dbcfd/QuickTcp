@@ -1,5 +1,7 @@
 #include "os/windows/client/Client.h"
+#include "os/windows/client/ReceiveOverlap.h"
 #include "os/windows/client/SendOverlap.h"
+#include "os/windows/client/IEventHandler.h"
 
 #include "async/AsyncResult.h"
 
@@ -12,12 +14,35 @@ namespace os {
 namespace windows {
 namespace client {
 
+//------------------------------------------------------------------------------
+class Client::EventHandler : public IEventHandler
+{
+public:
+    EventHandler(Client& client) : mClient(client)
+    {
+
+    }
+
+    virtual void createReceiveOverlap(std::shared_ptr<Socket> socket, std::promise<async_cpp::async::AsyncResult>& promise)
+    {
+        auto overlap = new ReceiveOverlap(socket, mClient.bufferSize(), promise, mClient.mEventHandler);
+        overlap->prepareToReceive();
+    }
+
+    virtual async_cpp::async::AsyncResult processStream(std::shared_ptr<utilities::ByteStream> stream)
+    {
+        return mClient.processStreamFunction()(stream);
+    }
+
+    Client& mClient;
+};
 
 //------------------------------------------------------------------------------
 Client::Client(const quicktcp::client::ServerInfo& info, 
         std::shared_ptr<utilities::ByteStream> authentication, 
-        const size_t bufferSize) 
-    : quicktcp::client::IClient(info, authentication, bufferSize), mIsRunning(false)
+        const size_t bufferSize,
+        std::function<async_cpp::async::AsyncResult(std::shared_ptr<utilities::ByteStream>)> processStreamFunc) 
+    : quicktcp::client::IClient(info, authentication, bufferSize, processStreamFunc), mIsRunning(false)
 {
    //startup winsock
     WSAData wsaData;
@@ -30,6 +55,8 @@ Client::Client(const quicktcp::client::ServerInfo& info,
         WSACleanup();
         throw(std::runtime_error(error));
     }
+
+    mEventHandler = std::shared_ptr<EventHandler>(new EventHandler(*this));
 
     connect();
 }
@@ -190,7 +217,7 @@ std::future<async_cpp::async::AsyncResult> Client::request(std::shared_ptr<utili
     }
 
     DWORD flags = 0;
-    auto sendOverlap = new SendOverlap(mSocket, byteStream, mBufferSize);
+    auto sendOverlap = new SendOverlap(mSocket, byteStream, mEventHandler);
 
     /**
      * Perform an asynchronous send, with no callback. This uses the overlapped

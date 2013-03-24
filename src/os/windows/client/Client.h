@@ -20,7 +20,8 @@ class WINDOWSCLIENT_API Client : public quicktcp::client::IClient
 public:
     Client(const quicktcp::client::ServerInfo& info, 
         std::shared_ptr<utilities::ByteStream> authentication, 
-        const size_t bufferSize);
+        const size_t bufferSize,
+        std::function<async_cpp::async::AsyncResult(std::shared_ptr<utilities::ByteStream>)> processStreamFunc);
 	~Client();
 
     virtual std::future<async_cpp::async::AsyncResult> request(std::shared_ptr<utilities::ByteStream> stream);
@@ -31,6 +32,8 @@ private:
 
     void connect();
 
+    class EventHandler;
+    std::shared_ptr<EventHandler> mEventHandler;
     std::shared_ptr<Socket> mSocket;
     HANDLE mIOCP;
     bool mIsRunning;

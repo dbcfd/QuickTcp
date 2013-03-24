@@ -13,8 +13,9 @@ namespace client {
 //------------------------------------------------------------------------------
 ReceiveOverlap::ReceiveOverlap(std::shared_ptr<Socket> sckt, 
                          const size_t recvBufferSize,
-                         std::promise<async_cpp::async::AsyncResult>& promise) 
-                         : IOverlap(sckt, recvBufferSize), mPromise(std::move(promise))
+                         std::promise<async_cpp::async::AsyncResult>& promise,
+                         std::shared_ptr<IEventHandler> handler) 
+                         : IOverlap(sckt, recvBufferSize, handler), mPromise(std::move(promise))
 {
 
 }
@@ -63,7 +64,7 @@ void ReceiveOverlap::handleIOCompletion(const size_t nbBytes)
 //------------------------------------------------------------------------------
 void ReceiveOverlap::shutdown(const std::string& message)
 {
-    mPromise.set_value(async_cpp::async::AsyncResult("Failed to send complete request"));
+    mPromise.set_value(async_cpp::async::AsyncResult(message));
     closeEvent();
 }
 

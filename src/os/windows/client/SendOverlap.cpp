@@ -1,5 +1,5 @@
 #include "os/windows/client/SendOverlap.h"
-#include "os/windows/client/ReceiveOverlap.h"
+#include "os/windows/client/IEventHandler.h"
 #include "os/windows/client/Socket.h"
 
 #include "utilities/ByteStream.h"
@@ -14,8 +14,8 @@ namespace client {
 //------------------------------------------------------------------------------
 SendOverlap::SendOverlap(std::shared_ptr<Socket> sckt, 
                          std::shared_ptr<utilities::ByteStream> stream,
-                         const size_t receiveBufferSize) 
-                         : IOverlap(sckt, stream), mReceiveBufferSize(receiveBufferSize)
+                         std::shared_ptr<IEventHandler> handler) 
+                         : IOverlap(sckt, stream, handler)
 {
 
 }
@@ -64,8 +64,7 @@ void SendOverlap::completeSend()
     }
     else
     {
-        auto overlap = new ReceiveOverlap(mSocket, mReceiveBufferSize, mPromise);
-        overlap->prepareToReceive();
+        mEventHandler->createReceiveOverlap(mSocket, mPromise);
     }
     closeEvent();
 }
@@ -73,7 +72,7 @@ void SendOverlap::completeSend()
 //------------------------------------------------------------------------------
 void SendOverlap::shutdown(const std::string& message)
 {
-    mPromise.set_value(async_cpp::async::AsyncResult("Failed to send complete request"));
+    mPromise.set_value(async_cpp::async::AsyncResult(message));
     closeEvent();
 }
 

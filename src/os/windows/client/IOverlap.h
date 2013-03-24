@@ -21,9 +21,11 @@ class IEventHandler;
 //------------------------------------------------------------------------------
 struct IOverlap : public WSAOVERLAPPED {
     IOverlap(std::shared_ptr<Socket> socket, 
-        const size_t bufferSize);
+        const size_t bufferSize,
+        std::shared_ptr<IEventHandler> handler);
     IOverlap(std::shared_ptr<Socket> socket, 
-        std::shared_ptr<utilities::ByteStream> stream);
+        std::shared_ptr<utilities::ByteStream> stream,
+        std::shared_ptr<IEventHandler> handler);
     virtual ~IOverlap();
 
     virtual void handleIOCompletion(const size_t nbBytes) = 0;
@@ -39,6 +41,7 @@ struct IOverlap : public WSAOVERLAPPED {
     DWORD mFlags;
     std::shared_ptr<Socket> mSocket;
     std::shared_ptr<utilities::ByteStream> mStream;
+    std::shared_ptr<IEventHandler> mEventHandler;
     std::shared_ptr<char> mBuffer;
     bool mHasClosedEvent;
 };

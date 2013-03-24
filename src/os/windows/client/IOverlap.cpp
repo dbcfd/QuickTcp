@@ -11,8 +11,8 @@ namespace windows {
 namespace client {
 
 //------------------------------------------------------------------------------
-IOverlap::IOverlap(std::shared_ptr<Socket> sckt, size_t bufferSize) 
-    : mSocket(sckt), mBytes(0), mFlags(0), mHasClosedEvent(false)
+IOverlap::IOverlap(std::shared_ptr<Socket> sckt, size_t bufferSize, std::shared_ptr<IEventHandler> handler) 
+    : mSocket(sckt), mBytes(0), mFlags(0), mHasClosedEvent(false), mEventHandler(handler)
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
@@ -28,8 +28,8 @@ IOverlap::IOverlap(std::shared_ptr<Socket> sckt, size_t bufferSize)
 }
 
 //------------------------------------------------------------------------------
-IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<utilities::ByteStream> stream) 
-    : mSocket(sckt), mBytes(0), mFlags(0), mHasClosedEvent(false)
+IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<utilities::ByteStream> stream, std::shared_ptr<IEventHandler> handler) 
+    : mSocket(sckt), mBytes(0), mFlags(0), mHasClosedEvent(false), mEventHandler(handler)
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
