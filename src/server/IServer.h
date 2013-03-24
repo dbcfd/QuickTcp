@@ -3,14 +3,11 @@
 #include "server/Platform.h"
 #include "server/ServerInfo.h"
 
-#include <atomic>
-#include <functional>
-#include <future>
 #include <memory>
 
 namespace async_cpp {
-namespace async {
-class AsyncResult;
+namespace workers {
+class IManager;
 }
 }
 
@@ -22,7 +19,7 @@ class ByteStream;
 
 namespace server {
 
-class IServerConnection;
+class IResponder;
 
 /**
  * Server interface. Platform specific implementations will implement this interface, allowing
@@ -30,13 +27,17 @@ class IServerConnection;
  */
 class SERVER_API IServer {
 public:
-    IServer(const ServerInfo& info);
+    IServer(const quicktcp::server::ServerInfo& info, 
+        std::shared_ptr<async_cpp::workers::IManager> mgr, 
+        std::shared_ptr<IResponder> responder);
 
     virtual void shutdown() = 0;
     virtual void waitForEvents() = 0;
 
 protected:
     ServerInfo mInfo;
+    std::shared_ptr<async_cpp::workers::IManager> mManager;
+    std::shared_ptr<quicktcp::server::IResponder> mResponder;
 };
 
 //inline implementations

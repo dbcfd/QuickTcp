@@ -5,6 +5,8 @@
 
 #include "server/IServer.h"
 
+#include <atomic>
+#include <condition_variable>
 #include <vector>
 
 namespace async_cpp {
@@ -61,9 +63,6 @@ private:
     void createServerSocket();
 
     std::shared_ptr<IEventHandler> mEventHandler;
-    std::shared_ptr<async_cpp::workers::IManager> mManager;
-    std::shared_ptr<quicktcp::server::IResponder> mResponder;
-    std::shared_ptr<std::thread> mConnectionThread;
 
     std::atomic<bool> mIsRunning;
 

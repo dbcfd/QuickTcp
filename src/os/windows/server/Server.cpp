@@ -113,7 +113,7 @@ public:
 Server::Server(const quicktcp::server::ServerInfo& info, 
         std::shared_ptr<async_cpp::workers::IManager> mgr, 
         std::shared_ptr<quicktcp::server::IResponder> responder) :
-    quicktcp::server::IServer(info), mManager(mgr), mResponder(responder), mIsRunning(true)
+    quicktcp::server::IServer(info, mgr, responder), mIsRunning(true)
 {
     mEventHandler = std::shared_ptr<IEventHandler>(new EventHandler(*this, mResponder, mManager));
     assert(nullptr != mgr);
