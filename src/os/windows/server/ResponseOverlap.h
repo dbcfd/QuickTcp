@@ -27,6 +27,7 @@ struct ResponseOverlap : public IOverlap {
     virtual ~ResponseOverlap();
 
     virtual void handleIOCompletion(const size_t nbBytes);
+    virtual std::string isA() { return "Response"; }
 
     async_cpp::async::AsyncResult mResult;
 };

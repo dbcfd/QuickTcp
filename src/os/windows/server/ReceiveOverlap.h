@@ -23,13 +23,13 @@ struct ReceiveOverlap : public IOverlap {
     virtual ~ReceiveOverlap();
 
     virtual void handleIOCompletion(const size_t nbBytes);
+    virtual std::string isA() { return "Receive"; }
     
     void prepareToReceive();
     void disconnect();
 
 private:
     std::function<void(void)> mOnDisconnect;
-    bool mIsAuthenticated;
 };
 
 //Inline Implementations

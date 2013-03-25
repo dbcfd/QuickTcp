@@ -16,7 +16,9 @@
 #include "workers/BasicTask.h"
 
 #include <assert.h>
+#include <chrono>
 #include <string>
+#include <map>
 
 namespace quicktcp {
 namespace os {
@@ -32,23 +34,57 @@ public:
 
     }
 
-    virtual void authenticateConnection(std::shared_ptr<utilities::ByteStream> stream, ReceiveOverlap* overlap)
+    virtual void authenticateConnection(std::shared_ptr<utilities::ByteStream> stream, ReceiveOverlap& overlap)
     {
         manager->run(std::shared_ptr<async_cpp::workers::Task>(new async_cpp::workers::BasicTask(
-            [this, stream, overlap]()->void {
-                bool authenticated = false;
+            [this, stream, &overlap]()->void {
                 try {
-                    authenticated = responder->authenticateConnection(stream);
-                    PostQueuedCompletionStatus(server.getIOCompletionPort(), 0, 0, overlap);
+                    if(responder->authenticateConnection(stream))
+                    {
+                        overlap.prepareToReceive();
+                    }
+                    else
+                    {
+                        overlap.disconnect();
+                    }
                 }
                 catch(std::exception& ex)
                 {
                     reportError(ex.what());
-                    overlap->disconnect();
+                    overlap.disconnect();
                 }
             }
         ) ) );
+    }
 
+    virtual void markForDeletion(IOverlap& overlap)
+    {
+        auto now = std::chrono::system_clock::now();
+        std::unique_lock<std::mutex> lock(mutex);
+        if(!overlapsForDeletion.empty())
+        {
+            auto deletionCutoffTime = now - std::chrono::seconds(30);
+            if(overlapsForDeletion.begin()->first < deletionCutoffTime)
+            {
+                auto endItr = overlapsForDeletion.lower_bound(deletionCutoffTime);
+                for(auto itr = overlapsForDeletion.begin(); itr != endItr; ++itr)
+                {
+                    delete itr->second;
+                }
+                overlapsForDeletion.erase(overlapsForDeletion.begin(), endItr);
+            }
+        }
+        overlapsForDeletion.insert(std::make_pair(std::chrono::system_clock::now(), &overlap));
+    }
+
+    virtual void deleteMarkedOverlaps()
+    {
+        std::unique_lock<std::mutex> lock(mutex);
+        for(auto& kv : overlapsForDeletion)
+        {
+            delete kv.second;
+        }
+        overlapsForDeletion.clear();
     }
 
     virtual void queueAccept(ConnectOverlap& overlap)
@@ -56,23 +92,22 @@ public:
         server.prepareForClientConnection(overlap);
     }
 
-    virtual void createResponse(std::shared_ptr<utilities::ByteStream> stream, ResponseOverlap* overlap)
+    virtual void createResponse(std::shared_ptr<utilities::ByteStream> stream, ResponseOverlap& overlap)
     {
         manager->run(std::shared_ptr<async_cpp::workers::Task>(new async_cpp::workers::BasicTask(
-            [this, stream, overlap]()->void {
+            [this, stream, &overlap]()->void {
                 try {
-                    overlap->mResult = responder->respond(stream);
+                    overlap.mResult = responder->respond(stream);
                 }
                 catch(std::exception& ex)
                 {
                     //failure
-                    overlap->mResult = async_cpp::async::AsyncResult(ex.what());
+                    overlap.mResult = async_cpp::async::AsyncResult(ex.what());
                 }
-                PostQueuedCompletionStatus(server.getIOCompletionPort(), 0, 0, overlap);
+                PostQueuedCompletionStatus(server.getIOCompletionPort(), 0, 0, &overlap);
             }
         ) ) );
     }
-
     virtual void reportError(const std::string& error)
     {
         //TODO
@@ -106,6 +141,8 @@ public:
     Server& server;
     std::shared_ptr<quicktcp::server::IResponder> responder;
     std::shared_ptr<async_cpp::workers::IManager> manager;
+    std::mutex mutex;
+    std::map<std::chrono::system_clock::time_point, IOverlap*> overlapsForDeletion;
 
 };
 
@@ -113,7 +150,7 @@ public:
 Server::Server(const quicktcp::server::ServerInfo& info, 
         std::shared_ptr<async_cpp::workers::IManager> mgr, 
         std::shared_ptr<quicktcp::server::IResponder> responder) :
-    quicktcp::server::IServer(info, mgr, responder), mIsRunning(true)
+    quicktcp::server::IServer(info, mgr, responder), mRunning(true), mWaitingForEvents(false)
 {
     mEventHandler = std::shared_ptr<IEventHandler>(new EventHandler(*this, mResponder, mManager));
     assert(nullptr != mgr);
@@ -171,6 +208,8 @@ void Server::createServerSocket()
 
     //getaddrinfo successful, create socket
     mSocket = WSASocket(AF_INET, SOCK_STREAM, IPPROTO_IP, nullptr, 0, WSA_FLAG_OVERLAPPED);
+    BOOL opt = TRUE;
+    setsockopt(mSocket, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(BOOL));
 
     CreateIoCompletionPort((HANDLE)mSocket, mIOCP, (ULONG_PTR)mSocket, 0);
 
@@ -200,31 +239,31 @@ void Server::createServerSocket()
 Server::~Server()
 {
     shutdown();
-    std::mutex mutex;
-    std::unique_lock<std::mutex> lock(mutex);
-    mShutdownSignal.wait(lock, [this]()->bool {
-        return mOverlaps.empty();
-    } );
 }
 
 //------------------------------------------------------------------------------
 void Server::shutdown()
 {
-    bool wasRunning = mIsRunning.exchange(false);
+    bool wasRunning = mRunning.exchange(false);
     if(wasRunning)
     {
-        PostQueuedCompletionStatus(mIOCP, 0, 0, 0);
-        WSARecvDisconnect(mSocket, 0);
-        WSASendDisconnect(mSocket, 0);
-        closesocket(mSocket);
+        CloseHandle(mIOCP);
         for(auto overlap : mOverlaps)
         {
-            overlap->closeEvent();
+            overlap->waitForDisconnect();
             overlap->mSocket->close();
         }
+        {         
+            std::unique_lock<std::mutex> lock(mMutex);
+            mShutdownSignal.wait(lock, [this]()->bool {
+                return !mWaitingForEvents;
+            } );
+        }
         mManager->waitForTasksToComplete();
-        CloseHandle(mIOCP);
+        mEventHandler->deleteMarkedOverlaps();
         mOverlaps.clear();
+        //finish clean up
+        closesocket(mSocket);
         WSACleanup();
         mShutdownSignal.notify_all();
     }
@@ -233,24 +272,31 @@ void Server::shutdown()
 //------------------------------------------------------------------------------
 void Server::waitForEvents()
 {
-    while(mIsRunning)
     {
-        DWORD bytes = 0;
-        ULONG_PTR key = 0;
-        LPOVERLAPPED overlap = 0;
-        if(GetQueuedCompletionStatus(mIOCP, &bytes, &key, &overlap, WSA_INFINITE) && mIsRunning)
+        std::unique_lock<std::mutex> lock(mMutex);
+        mWaitingForEvents = true;
+    }
+    while(mRunning)
+    {
+        OVERLAPPED_ENTRY overlaps[10];
+        ULONG overlapsReturned = 0;
+        if(GetQueuedCompletionStatusEx(mIOCP, overlaps, sizeof(overlaps), &overlapsReturned, WSA_INFINITE, FALSE))
         {
-            if(nullptr != overlap)
+            for(auto idx = ULONG(0); idx < overlapsReturned; ++idx)
             {
-                auto ioverlap = static_cast<IOverlap*>(overlap);
-                ioverlap->handleIOCompletion(bytes);
-                if(ioverlap->requiresDeletion())
+                if(nullptr != overlaps[idx].lpOverlapped)
                 {
-                    delete ioverlap;
+                    auto ioverlap = static_cast<IOverlap*>(overlaps[idx].lpOverlapped);
+                    ioverlap->handleIOCompletion(overlaps[idx].dwNumberOfBytesTransferred);
                 }
             }
         }
     }   
+    {
+        std::unique_lock<std::mutex> lock(mMutex);
+        mWaitingForEvents = false;
+    }
+    mShutdownSignal.notify_all();
 }
 
 //------------------------------------------------------------------------------
@@ -301,18 +347,16 @@ void Server::send(std::shared_ptr<Socket> sckt, std::shared_ptr<utilities::ByteS
     {
         auto overlap = new SendOverlap(sckt, mEventHandler, stream);
 
+        //if socket error, need to see if it was just pending
+        //completed sends will be reported via i/o completion
         if(SOCKET_ERROR == WSASend(sckt->socket(), &overlap->mWsaBuffer, 1, &overlap->mBytes, overlap->mFlags, overlap, 0))
         {
             int lastError = WSAGetLastError();
             if(WSA_IO_PENDING != lastError)
             {
-                mEventHandler->reportError("Error sending data");
-                delete overlap;
+                mEventHandler->reportError(std::string("Error sending data") + std::to_string(lastError));
+                mEventHandler->markForDeletion(*overlap);
             }
-        }
-        else
-        {
-            overlap->completeSend(); //no delete required, i/o completion will be hit
         }
     }
 }

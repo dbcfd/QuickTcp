@@ -27,9 +27,11 @@ struct ConnectOverlap : public IOverlap {
     virtual ~ConnectOverlap();
 
     virtual void handleIOCompletion(const size_t nbBytes);
+    virtual std::string isA() { return "Connect"; }
 
     void reset();
     void handleConnection();
+    void waitForDisconnect();
 
 private:
     ReceiveOverlap* mReceiver;

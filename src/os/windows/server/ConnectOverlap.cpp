@@ -34,35 +34,35 @@ ConnectOverlap::~ConnectOverlap()
 //------------------------------------------------------------------------------
 void ConnectOverlap::handleIOCompletion(const size_t nbBytes)
 {
-    if(hasOpenEvent())
+    mFlags = 0;
+    if(WSAGetOverlappedResult(mSocket->socket(), this, &mBytes, FALSE, &mFlags))
     {
-        mFlags = 0;
-        if(WSAGetOverlappedResult(mSocket->socket(), this, &mBytes, FALSE, &mFlags))
+        ResetEvent(hEvent);
+        if(mPendingDisconnect)
         {
-            ResetEvent(hEvent);
-            if(mPendingDisconnect)
-            {
-                mPendingDisconnect = false;
-                mEventHandler->queueAccept(*this);
-            }
-            else
-            {
-                //handle the connection
-                handleConnection();
-            }
+            mPendingDisconnect = false;
+            mEventHandler->queueAccept(*this);
         }
         else
         {
-            //i/o wasn't complete, see if it was due to error or buffer fulle
-            int err = WSAGetLastError();
-            if(WSA_IO_INCOMPLETE != err)
+            //handle the connection, only if the socket is valid, otherwise we're closing down
+            if(mSocket->isValid())
             {
-                mEventHandler->reportError(std::string("Incomplete I/O Error when waiting for connection") + std::to_string(err));
+                handleConnection();
             }
-            else
-            {
-                transferBufferToStream(mBytes);
-            }
+        }
+    }
+    else
+    {
+        //i/o wasn't complete, see if it was due to error or buffer fulle
+        int err = WSAGetLastError();
+        if(WSA_IO_INCOMPLETE != err)
+        {
+            mEventHandler->reportError(std::string("Incomplete I/O Error when waiting for connection") + std::to_string(err));
+        }
+        else
+        {
+            transferBufferToStream(mBytes);
         }
     }
 }
@@ -70,23 +70,33 @@ void ConnectOverlap::handleIOCompletion(const size_t nbBytes)
 //------------------------------------------------------------------------------
 void ConnectOverlap::reset()
 {
-    mPendingDisconnect = true;
-    mSocket->disconnect(this);
-    mEventHandler->connectionClosed();
+    if(mReceiver)
+    {
+        mPendingDisconnect = true;
+        mSocket->disconnect(this);
+        mEventHandler->connectionClosed();
+    }
     mReceiver = nullptr;
 }
 
 //------------------------------------------------------------------------------
 void ConnectOverlap::handleConnection()
 {
-    BOOL bOptVal = TRUE;
-    int bOptLen = sizeof(BOOL);
-    //update the socket context based on our server
-    setsockopt(mSocket->socket(), SOL_SOCKET, SO_UPDATE_ACCEPT_CONTEXT, (char*) &bOptVal, bOptLen);
+    BOOL opt = TRUE;
+    setsockopt(mSocket->socket(), SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(BOOL));
 
     mReceiver = new ReceiveOverlap(mSocket, mEventHandler, std::bind(&ConnectOverlap::reset, this));
 
-    mEventHandler->authenticateConnection(transferStream(), mReceiver);
+    mEventHandler->authenticateConnection(transferStream(), *mReceiver);
+}
+
+//------------------------------------------------------------------------------
+void ConnectOverlap::waitForDisconnect()
+{
+    if(mPendingDisconnect)
+    {
+        WSAGetOverlappedResult(mSocket->socket(), this, &mBytes, FALSE, &mFlags);
+    }
 }
 
 }

@@ -26,29 +26,26 @@ SendOverlap::~SendOverlap()
 //------------------------------------------------------------------------------
 void SendOverlap::handleIOCompletion(const size_t nbBytes)
 {
-    if(hasOpenEvent())
+    mFlags = 0;
+    DWORD bytesSent = 0;
+    if(WSAGetOverlappedResult(mSocket->socket(), this, &bytesSent, FALSE, &mFlags))
     {
-        mFlags = 0;
-        DWORD bytesSent = 0;
-        if(WSAGetOverlappedResult(mSocket->socket(), this, &bytesSent, FALSE, &mFlags))
+        mBytes += bytesSent;
+        completeSend();
+    }
+    else
+    {
+        //i/o wasn't complete, see if it was due to error or buffer fulle
+        int err = WSAGetLastError();
+        if(WSA_IO_INCOMPLETE == err)
         {
             mBytes += bytesSent;
-            completeSend();
         }
         else
         {
-            //i/o wasn't complete, see if it was due to error or buffer fulle
-            int err = WSAGetLastError();
-            if(WSA_IO_INCOMPLETE == err)
-            {
-                mBytes += bytesSent;
-            }
-            else
-            {
-                completeSend();
-            }
-        }    
-    }
+            completeSend();
+        }
+    }    
 }
 
 //------------------------------------------------------------------------------
@@ -58,7 +55,7 @@ void SendOverlap::completeSend()
     {
         mEventHandler->reportError("Failed to send all bytes");
     }
-    closeEvent();
+    mEventHandler->markForDeletion(*this);
 }
 
 }

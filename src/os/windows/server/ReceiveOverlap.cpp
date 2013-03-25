@@ -17,7 +17,7 @@ namespace server {
 ReceiveOverlap::ReceiveOverlap(std::shared_ptr<Socket> sckt, 
         std::shared_ptr<IEventHandler> evHandler, 
         std::function<void(void)> onDisconnect) 
-    : IOverlap(sckt, evHandler, evHandler->receiveBufferSize()), mOnDisconnect(onDisconnect), mIsAuthenticated(false)
+    : IOverlap(sckt, evHandler, evHandler->receiveBufferSize()), mOnDisconnect(onDisconnect)
 {
 
 }
@@ -31,42 +31,31 @@ ReceiveOverlap::~ReceiveOverlap()
 //------------------------------------------------------------------------------
 void ReceiveOverlap::handleIOCompletion(const size_t nbBytes)
 {
-    if(hasOpenEvent())
+    mFlags = 0;
+    if(WSAGetOverlappedResult(mSocket->socket(), this, &mBytes, FALSE, &mFlags))
     {
-        if(!mIsAuthenticated)
+        ResetEvent(hEvent);
+        //receive when connected, no bytes means disconnect
+        if(mBytes == 0)
         {
-            mIsAuthenticated = true;
-            prepareToReceive();
+            disconnect();
         }
         else
         {
-            mFlags = 0;
-            if(WSAGetOverlappedResult(mSocket->socket(), this, &mBytes, FALSE, &mFlags))
-            {
-                ResetEvent(hEvent);
-                //receive when connected, no bytes means disconnect
-                if(mBytes == 0)
-                {
-                    disconnect();
-                }
-                else
-                {
-                    //handle read
-                    transferBufferToStream(mBytes);
-                    mEventHandler->createResponse(transferStream(), new ResponseOverlap(mSocket, mEventHandler));
-                    prepareToReceive();
-                }
-            }
-            else
-            {
-                //i/o wasn't complete, see if it was due to error or buffer fulle
-                int err = WSAGetLastError();
-                if(WSA_IO_INCOMPLETE != err)
-                {
-                    mEventHandler->reportError(std::string("Incomplete I/O error when trying to receive: ") + std::to_string(err));
-                    disconnect();
-                }
-            }
+            //handle read
+            transferBufferToStream(mBytes);
+            mEventHandler->createResponse(transferStream(), *(new ResponseOverlap(mSocket, mEventHandler)));
+            prepareToReceive();
+        }
+    }
+    else
+    {
+        //i/o wasn't complete, see if it was due to error or buffer fulle
+        int err = WSAGetLastError();
+        if(WSA_IO_INCOMPLETE != err)
+        {
+            mEventHandler->reportError(std::string("Incomplete I/O error when trying to receive: ") + std::to_string(err));
+            disconnect();
         }
     }
 }
@@ -92,7 +81,7 @@ void ReceiveOverlap::prepareToReceive()
             else
             {
                 transferBufferToStream(mBytes);
-                mEventHandler->createResponse(transferStream(), new ResponseOverlap(mSocket, mEventHandler));
+                mEventHandler->createResponse(transferStream(), *(new ResponseOverlap(mSocket, mEventHandler)));
             }
         }
 
@@ -110,7 +99,7 @@ void ReceiveOverlap::prepareToReceive()
 void ReceiveOverlap::disconnect()
 {
     mOnDisconnect();
-    closeEvent();
+    mEventHandler->markForDeletion(*this);
 }
 
 }

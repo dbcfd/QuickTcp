@@ -64,7 +64,9 @@ private:
 
     std::shared_ptr<IEventHandler> mEventHandler;
 
-    std::atomic<bool> mIsRunning;
+    std::atomic<bool> mRunning;
+    bool mWaitingForEvents;
+    std::mutex mMutex;
 
     SOCKET mSocket; //this is the socket we listen for connections on
     HANDLE mIOCP;

@@ -23,19 +23,16 @@ ResponseOverlap::~ResponseOverlap()
 //------------------------------------------------------------------------------
 void ResponseOverlap::handleIOCompletion(const size_t nbBytes)
 {
-    if(hasOpenEvent())
+    if(mResult.wasError())
     {
-        if(mResult.wasError())
-        {
-            mEventHandler->reportError(mResult.error());
-        }
-        else
-        {
-            auto response = std::static_pointer_cast<utilities::ByteStream>(mResult.result());
-            mEventHandler->sendResponse(mSocket, response);
-        }
-        closeEvent();
+        mEventHandler->reportError(mResult.error());
     }
+    else
+    {
+        auto response = std::static_pointer_cast<utilities::ByteStream>(mResult.result());
+        mEventHandler->sendResponse(mSocket, response);
+    }
+    mEventHandler->markForDeletion(*this);
 }
 
 }

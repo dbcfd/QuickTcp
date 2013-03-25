@@ -30,11 +30,8 @@ struct IOverlap : public WSAOVERLAPPED {
 
     virtual void handleIOCompletion(const size_t nbBytes) = 0;
 
-    void closeEvent();
     void transferBufferToStream(const size_t nbBytes);
     std::shared_ptr<utilities::ByteStream> transferStream();
-    inline bool requiresDeletion() const;
-    inline bool hasOpenEvent() const;
 
     WSABUF mWsaBuffer;
     DWORD mBytes;
@@ -43,21 +40,10 @@ struct IOverlap : public WSAOVERLAPPED {
     std::shared_ptr<IEventHandler> mEventHandler;
     std::shared_ptr<utilities::ByteStream> mStream;
     std::shared_ptr<char> mBuffer;
-    bool mHasClosedEvent;
 };
 
 //Inline Implementations
 //------------------------------------------------------------------------------
-bool IOverlap::requiresDeletion() const
-{
-    return mHasClosedEvent;
-}
-
-//------------------------------------------------------------------------------
-bool IOverlap::hasOpenEvent() const
-{
-    return hEvent != WSA_INVALID_EVENT;
-}
 
 }
 }

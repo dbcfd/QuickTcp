@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include <functional>
+#include <iostream>
 
 using namespace quicktcp;
 
@@ -67,6 +68,9 @@ public:
             int err = WSAGetLastError();
             throw(std::runtime_error("could not connect"));
         }
+        DWORD timeout = 30;
+        setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(DWORD));
+        setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, (char*)&timeout, sizeof(DWORD));
 
         freeaddrinfo(results);
 
@@ -75,12 +79,6 @@ public:
         couldConnect = true;
 
         afterConnection(socket);
-
-        if(SOCKET_ERROR == WSASendDisconnect(socket, 0))
-        {
-            int err = WSAGetLastError();
-            throw(std::runtime_error("could not disconnect"));
-        }
 
         closesocket(socket);
 
@@ -170,7 +168,7 @@ public:
 
     virtual void TearDown()
     {
-
+        manager->shutdown();
     }
 
     std::shared_ptr<Responder> responder;
@@ -184,8 +182,6 @@ using namespace quicktcp::os::windows::server;
 TEST_F(ServerTest, CONSTRUCTOR)
 {
     ASSERT_NO_THROW(Server(serverInfo, manager, responder));
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
 }
 
 TEST_F(ServerTest, ACCEPT_CONNECTION)
@@ -198,13 +194,13 @@ TEST_F(ServerTest, ACCEPT_CONNECTION)
 
     MockClient client(std::chrono::milliseconds(10));
 
-    ASSERT_NO_THROW(client.connect(port, [](SOCKET) {}));
+    EXPECT_NO_THROW(client.connect(port, [](SOCKET) {}));
 
-    ASSERT_TRUE(client.couldConnect);
+    EXPECT_TRUE(client.couldConnect);
 
-    ASSERT_TRUE(responder->clientDisconnected);
+    EXPECT_NO_THROW(server.shutdown());
 
-    ASSERT_NO_THROW(server.shutdown());
+    EXPECT_TRUE(responder->clientDisconnected);
 
     thread.join();
 }
@@ -219,14 +215,14 @@ TEST_F(ServerTest, ACCEPT_CONNECTION_SEND)
 
     MockClient client(std::chrono::milliseconds(10));
 
-    ASSERT_NO_THROW(client.sendToServer(port, [&client](SOCKET) {} ) );
+    EXPECT_NO_THROW(client.sendToServer(port, [&client](SOCKET) {} ) );
 
-    ASSERT_TRUE(client.couldConnect);
+    EXPECT_TRUE(client.couldConnect);
 
-    ASSERT_TRUE(responder->clientDisconnected);
-    ASSERT_TRUE(responder->attemptedResponse);
+    EXPECT_NO_THROW(server.shutdown());
 
-    ASSERT_NO_THROW(server.shutdown());
+    EXPECT_TRUE(responder->clientDisconnected);
+    EXPECT_TRUE(responder->attemptedResponse);
 
     thread.join();
 }
@@ -241,16 +237,16 @@ TEST_F(ServerTest, ACCEPT_CONNECTION_SEND_RECEIVE)
 
     MockClient client(std::chrono::milliseconds(10));
 
-    ASSERT_NO_THROW(client.sendAndReceive(port));
+    EXPECT_NO_THROW(client.sendAndReceive(port));
 
-    ASSERT_TRUE(client.couldConnect);
+    EXPECT_TRUE(client.couldConnect);
 
-    ASSERT_TRUE(responder->clientDisconnected);
-    ASSERT_TRUE(responder->attemptedResponse);
+    EXPECT_TRUE(responder->clientDisconnected);
+    EXPECT_TRUE(responder->attemptedResponse);
 
-    ASSERT_NO_THROW(server.shutdown());
+    EXPECT_NO_THROW(server.shutdown());
 
-    ASSERT_STREQ("response from server", client.recvBuffer);
+    EXPECT_STREQ("response from server", client.recvBuffer);
 
     thread.join();
 }

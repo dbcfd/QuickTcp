@@ -21,6 +21,7 @@ public:
     ~SendOverlap();
 
     virtual void handleIOCompletion(const size_t nbBytes);
+    virtual std::string isA() { return "Send"; }
 
     void completeSend();
 

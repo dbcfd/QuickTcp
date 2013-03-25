@@ -11,7 +11,7 @@ namespace server {
 
 //------------------------------------------------------------------------------
 IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<IEventHandler> eventHandler, size_t bufferSize) 
-    : mSocket(sckt), mEventHandler(eventHandler), mBytes(0), mFlags(0), mHasClosedEvent(false)
+    : mSocket(sckt), mEventHandler(eventHandler), mBytes(0), mFlags(0)
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
@@ -26,7 +26,7 @@ IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<IEventHandler> 
 
 //------------------------------------------------------------------------------
 IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<IEventHandler> eventHandler, std::shared_ptr<utilities::ByteStream> stream) 
-    : mSocket(sckt), mEventHandler(eventHandler), mBytes(0), mFlags(0), mHasClosedEvent(false)
+    : mSocket(sckt), mEventHandler(eventHandler), mBytes(0), mFlags(0)
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
@@ -42,14 +42,10 @@ IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<IEventHandler> 
 //------------------------------------------------------------------------------
 IOverlap::~IOverlap()
 {
-    
-}
-
-//------------------------------------------------------------------------------
-void IOverlap::closeEvent()
-{
-    mHasClosedEvent = true;
-    WSACloseEvent(hEvent);
+    if(hEvent != WSA_INVALID_EVENT)
+    {
+        WSACloseEvent(hEvent);
+    }
     hEvent = WSA_INVALID_EVENT;
 }
 
