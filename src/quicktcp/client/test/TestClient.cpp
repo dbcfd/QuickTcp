@@ -1,5 +1,6 @@
-#include "client/IClient.h"
-#include "client/ServerInfo.h"
+#include "quicktcp/client/IClient.h"
+#include "quicktcp/client/IProcessor.h"
+#include "quicktcp/client/ServerInfo.h"
 
 #include "async/AsyncResult.h"
 
@@ -42,7 +43,7 @@ public:
     virtual std::future<async_cpp::async::AsyncResult> request(std::shared_ptr<utilities::ByteStream> stream) final
     {
         std::promise<async_cpp::async::AsyncResult> promise;
-        promise.set_value(async_cpp::async::AsyncResult(std::shared_ptr<void>(new bool(true))));
+        promise.set_value(async_cpp::async::AsyncResult(std::make_shared<bool>(true)));
         return promise.get_future();
     }
 };
@@ -50,7 +51,7 @@ public:
 
 TEST(CLIENT_TEST, CLIENT)
 {
-    std::shared_ptr<MockClient> client(new MockClient(ServerInfo("localhost", 8080), std::shared_ptr<utilities::ByteStream>(), 100));
+    auto client = std::make_shared<MockClient>(ServerInfo("localhost", 8080), std::shared_ptr<utilities::ByteStream>(), 100);
 
     EXPECT_TRUE(client->isConnected);
 

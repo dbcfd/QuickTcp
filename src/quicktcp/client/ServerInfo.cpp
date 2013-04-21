@@ -1,4 +1,4 @@
-#include "client/ServerInfo.h"
+#include "quicktcp/client/ServerInfo.h"
 
 #include <regex>
 

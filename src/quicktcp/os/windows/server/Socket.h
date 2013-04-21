@@ -1,7 +1,7 @@
 #pragma once
 
-#include "os/windows/Server/Platform.h"
-#include "os/windows/Server/Winsock2.h"
+#include "quicktcp/os/windows/Server/Platform.h"
+#include "quicktcp/os/windows/Server/Winsock2.h"
 
 namespace quicktcp {
 namespace os {

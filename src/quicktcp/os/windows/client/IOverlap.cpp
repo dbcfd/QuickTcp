@@ -1,6 +1,6 @@
-#include "os/windows/client/IOverlap.h"
+#include "quicktcp/os/windows/client/IOverlap.h"
 
-#include "utilities/ByteStream.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 #include <assert.h>
 #include <sstream>
@@ -12,7 +12,7 @@ namespace client {
 
 //------------------------------------------------------------------------------
 IOverlap::IOverlap(std::shared_ptr<Socket> sckt, size_t bufferSize, std::shared_ptr<IEventHandler> handler) 
-    : mSocket(sckt), mBytes(0), mFlags(0), mHasClosedEvent(false), mEventHandler(handler)
+    : mSocket(sckt), mBytes(0), mFlags(0), mHasClosedEvent(false), mEventHandler(handler), mBuffer(bufferSize, 0)
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
@@ -21,9 +21,7 @@ IOverlap::IOverlap(std::shared_ptr<Socket> sckt, size_t bufferSize, std::shared_
         throw(std::runtime_error(sstr.str()));
     }
     SecureZeroMemory(&mWsaBuffer, sizeof(WSABUF));
-    mBuffer = std::shared_ptr<char>(new char[bufferSize]);
-    memset(mBuffer.get(), 0, bufferSize);
-    mWsaBuffer.buf = mBuffer.get();
+    mWsaBuffer.buf = &mBuffer[0];
     mWsaBuffer.len = (ULONG)bufferSize;
 }
 
@@ -36,9 +34,9 @@ IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<utilities::Byte
         throw(std::runtime_error("WSACreateEvent"));
     }
     SecureZeroMemory(&mWsaBuffer, sizeof(WSABUF));
-    mBuffer = std::shared_ptr<char>(new char[stream->size()]);
-    memcpy(mBuffer.get(), stream->buffer(), stream->size());
-    mWsaBuffer.buf = mBuffer.get();
+    mBuffer.reserve(stream->size());
+    mBuffer.assign((const char*)stream->buffer(), (const char*)stream->buffer() + stream->size());
+    mWsaBuffer.buf = &mBuffer[0];
     mWsaBuffer.len = (ULONG)stream->size();
 }
 
@@ -61,10 +59,10 @@ void IOverlap::transferBufferToStream(const size_t nbBytes)
 {
     if(nbBytes > 0)
     {
-        std::shared_ptr<utilities::ByteStream> transferred(new utilities::ByteStream((void*)mWsaBuffer.buf, nbBytes));
+        auto transferred = std::make_shared<utilities::ByteStream>((void*)mWsaBuffer.buf, nbBytes);
         if(nullptr == mStream)
         {
-            mStream = std::shared_ptr<utilities::ByteStream>(transferred);
+            mStream = transferred;
         }
         else
         {

@@ -1,9 +1,10 @@
 #pragma once
 
-#include "os/windows/client/Platform.h"
-#include "os/windows/client/Winsock2.h"
+#include "quicktcp/os/windows/client/Platform.h"
+#include "quicktcp/os/windows/client/Winsock2.h"
 
 #include <memory>
+#include <vector>
 
 namespace quicktcp {
 
@@ -42,7 +43,7 @@ struct IOverlap : public WSAOVERLAPPED {
     std::shared_ptr<Socket> mSocket;
     std::shared_ptr<utilities::ByteStream> mStream;
     std::shared_ptr<IEventHandler> mEventHandler;
-    std::shared_ptr<char> mBuffer;
+    std::vector<char> mBuffer;
     bool mHasClosedEvent;
 };
 

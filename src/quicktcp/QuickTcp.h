@@ -6,9 +6,6 @@
 #include <memory>
 
 namespace async_cpp {
-namespace async {
-class AsyncResult;
-}
 namespace workers {
 class IManager;
 }
@@ -33,8 +30,7 @@ class ByteStream;
 
 extern QUICKTCP_API std::shared_ptr<client::IClient> CreateClient(const client::ServerInfo& info, 
                                                                   std::shared_ptr<utilities::ByteStream> authentication, 
-                                                                  const size_t bufferSize,
-                                                                  std::function<async_cpp::async::AsyncResult(std::shared_ptr<utilities::ByteStream>)> processStreamFunc);
+                                                                  const size_t bufferSize);
 
 extern QUICKTCP_API std::shared_ptr<server::IServer> CreateServer(const quicktcp::server::ServerInfo& info, 
                                                                   std::shared_ptr<async_cpp::workers::IManager> mgr, 

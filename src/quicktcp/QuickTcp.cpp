@@ -1,22 +1,21 @@
 #include "quicktcp/QuickTcp.h"
 
 #ifdef WIN32
-#include "os/windows/client/Client.h"
-#include "os/windows/server/Server.h"
+#include "quicktcp/os/windows/client/Client.h"
+#include "quicktcp/os/windows/server/Server.h"
 #else
-#include "os/posix/client/Client.h"
-#include "os/posix/server/Server.h"
+#include "quicktcp/os/posix/client/Client.h"
+#include "quicktcp/os/posix/server/Server.h"
 #endif
 
 namespace quicktcp {
 
 QUICKTCP_API std::shared_ptr<client::IClient> CreateClient(const client::ServerInfo& info, 
                                                            std::shared_ptr<utilities::ByteStream> authentication, 
-                                                           const size_t bufferSize,
-                                                           std::function<async_cpp::async::AsyncResult(std::shared_ptr<utilities::ByteStream>)> processStreamFunc)
+                                                           const size_t bufferSize)
 {
 #ifdef WIN32
-    return std::shared_ptr<client::IClient>(new os::windows::client::Client(info, authentication, bufferSize, processStreamFunc));
+    return std::make_shared<os::windows::client::Client>(info, authentication, bufferSize);
 #endif
 }
 
@@ -25,7 +24,7 @@ QUICKTCP_API std::shared_ptr<server::IServer> CreateServer(const quicktcp::serve
                                                            std::shared_ptr<server::IResponder> responder)
 {
 #ifdef WIN32
-    return std::shared_ptr<server::IServer>(new os::windows::server::Server(info, mgr, responder));
+    return std::make_shared<os::windows::server::Server>(info, mgr, responder);
 #endif
 }
 

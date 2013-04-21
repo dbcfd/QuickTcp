@@ -1,8 +1,8 @@
-#include "os/windows/client/SendOverlap.h"
-#include "os/windows/client/IEventHandler.h"
-#include "os/windows/client/Socket.h"
+#include "quicktcp/os/windows/client/SendOverlap.h"
+#include "quicktcp/os/windows/client/IEventHandler.h"
+#include "quicktcp/os/windows/client/Socket.h"
 
-#include "utilities/ByteStream.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 #include <string>
 

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "os/windows/server/Platform.h"
-#include "os/windows/server/Winsock2.h"
+#include "quicktcp/os/windows/server/Platform.h"
+#include "quicktcp/os/windows/server/Winsock2.h"
 
-#include "server/IServer.h"
+#include "quicktcp/server/IServer.h"
 
 #include <atomic>
 #include <condition_variable>

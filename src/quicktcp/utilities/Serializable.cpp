@@ -1,6 +1,6 @@
-#include "Utilities/Serializable.h"
-#include "Utilities/BinarySerializer.h"
-#include "Utilities/ByteStream.h"
+#include "quicktcp/utilities/Serializable.h"
+#include "quicktcp/utilities/BinarySerializer.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 namespace quicktcp {
 namespace utilities {
@@ -37,7 +37,7 @@ std::shared_ptr<ByteStream> Serializable::writeTo() const
 
     writeBinary(serializer);
 
-    return std::shared_ptr<ByteStream>(new ByteStream(serializer.transferBuffer(), serializer.size(), true));
+    return std::make_shared<ByteStream>(serializer.transferBuffer(), serializer.size(), true);
 }
 
 }

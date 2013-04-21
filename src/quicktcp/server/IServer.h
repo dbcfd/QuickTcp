@@ -1,7 +1,7 @@
 #pragma once
 
-#include "server/Platform.h"
-#include "server/ServerInfo.h"
+#include "quicktcp/server/Platform.h"
+#include "quicktcp/server/ServerInfo.h"
 
 #include <memory>
 

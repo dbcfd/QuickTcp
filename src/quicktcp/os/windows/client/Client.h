@@ -1,10 +1,10 @@
 #pragma once
 
-#include "os/windows/client/Platform.h"
-#include "os/windows/client/Socket.h"
-#include "os/windows/client/Winsock2.h"
+#include "quicktcp/os/windows/client/Platform.h"
+#include "quicktcp/os/windows/client/Socket.h"
+#include "quicktcp/os/windows/client/Winsock2.h"
 
-#include "client/IClient.h"
+#include "quicktcp/client/IClient.h"
 
 namespace quicktcp {
 namespace os {

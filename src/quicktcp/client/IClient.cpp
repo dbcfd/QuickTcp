@@ -1,5 +1,5 @@
-#include "client/IClient.h"
-#include "client/IProcessor.h"
+#include "quicktcp/client/IClient.h"
+#include "quicktcp/client/IProcessor.h"
 
 #include "async/AsyncResult.h"
 

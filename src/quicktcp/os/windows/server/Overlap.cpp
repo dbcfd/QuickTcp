@@ -1,9 +1,9 @@
-#include "os/windows/server/Overlap.h"
-#include "os/windows/server/ICompleter.h"
-#include "os/windows/server/IEventHandler.h"
-#include "os/windows/server/Socket.h"
+#include "quicktcp/os/windows/server/Overlap.h"
+#include "quicktcp/os/windows/server/ICompleter.h"
+#include "quicktcp/os/windows/server/IEventHandler.h"
+#include "quicktcp/os/windows/server/Socket.h"
 
-#include "utilities/ByteStream.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 #include <assert.h>
 
@@ -14,16 +14,14 @@ namespace server {
 
 //------------------------------------------------------------------------------
 Overlap::Overlap(std::shared_ptr<ICompleter> completer, const size_t bufferSize) 
-    : mCompleter(completer), mBytes(0), mFlags(0)
+    : mCompleter(completer), mBytes(0), mFlags(0), mBuffer(bufferSize, 0)
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
         throw(std::runtime_error("WSACreateEvent"));
     }
     SecureZeroMemory(&mWsaBuffer, sizeof(WSABUF));
-    mBuffer = std::shared_ptr<char>(new char[bufferSize]);
-    memset(mBuffer.get(), 0, bufferSize);
-    mWsaBuffer.buf = mBuffer.get();
+    mWsaBuffer.buf = &mBuffer[0];
     mWsaBuffer.len = (ULONG)bufferSize;
 }
 
@@ -36,9 +34,9 @@ Overlap::Overlap(std::shared_ptr<ICompleter> completer, std::shared_ptr<utilitie
         throw(std::runtime_error("WSACreateEvent"));
     }
     SecureZeroMemory(&mWsaBuffer, sizeof(WSABUF));
-    mBuffer = std::shared_ptr<char>(new char[stream->size()]);
-    memcpy(mBuffer.get(), stream->buffer(), stream->size());
-    mWsaBuffer.buf = mBuffer.get();
+    mBuffer.resize(stream->size());
+    mBuffer.assign((const char*)stream->buffer(), (const char*)stream->buffer() + stream->size());
+    mWsaBuffer.buf = &mBuffer[0];
     mWsaBuffer.len = (ULONG)stream->size();
 }
 
@@ -55,7 +53,7 @@ Overlap::~Overlap()
 //------------------------------------------------------------------------------
 bool Overlap::queueAcceptEx(LPFN_ACCEPTEX pfnAcceptEx, SOCKET serverSocket)
 {
-    auto acceptExResult = pfnAcceptEx(serverSocket, winsocket(), mBuffer.get(),
+    auto acceptExResult = pfnAcceptEx(serverSocket, winsocket(), &mBuffer[0],
         0, //mInfo.bufferSize() - addrSize,
         sizeof(SOCKADDR_STORAGE) + 16, sizeof(SOCKADDR_STORAGE) + 16, &mBytes,
         this);
@@ -118,10 +116,10 @@ void Overlap::transferBufferToStream()
 {
     if(mBytes > 0)
     {
-        std::shared_ptr<utilities::ByteStream> transferred(new utilities::ByteStream((void*)mWsaBuffer.buf, mBytes));
+        auto transferred = std::make_shared<utilities::ByteStream>((void*)mWsaBuffer.buf, mBytes);
         if(nullptr == mStream)
         {
-            mStream = std::shared_ptr<utilities::ByteStream>(transferred);
+            mStream = transferred;
         }
         else
         {

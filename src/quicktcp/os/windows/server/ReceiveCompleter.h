@@ -1,7 +1,7 @@
 #pragma once
 
-#include "os/windows/server/Platform.h"
-#include "os/windows/server/ICompleter.h"
+#include "quicktcp/os/windows/server/Platform.h"
+#include "quicktcp/os/windows/server/ICompleter.h"
 
 #include <atomic>
 #include <functional>

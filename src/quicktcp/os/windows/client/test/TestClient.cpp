@@ -1,13 +1,14 @@
-#include "os/windows/client/Client.h"
-#include "quicktcp/Client.h"
-#include "os/windows/client/Winsock2.h"
+#include "quicktcp/os/windows/client/Client.h"
+#include "quicktcp/os/windows/client/Winsock2.h"
 
 #include "async/AsyncResult.h"
 
 #include "workers/BasicTask.h"
 #include "workers/Manager.h"
 
-#include "utilities/ByteStream.h"
+#include "quicktcp/client/IProcessor.h"
+
+#include "quicktcp/utilities/ByteStream.h"
 
 #pragma warning(disable:4251 4275)
 #include <gtest/gtest.h>
@@ -117,8 +118,15 @@ public:
 
 using namespace os::windows::client;
 
-class ClientProcessor : public IProcessor {
+class ClientProcessor : public client::IProcessor {
 public:
+    virtual async_cpp::async::AsyncFuture processResponse(std::shared_ptr<utilities::ByteStream> stream) final
+    {
+        std::promise<async_cpp::async::AsyncResult> promise;
+        promise.set_value(async_cpp::async::AsyncResult(stream));
+        return promise.get_future();
+    }
+};
     
 class ClientTest : public testing::Test {
 public :
@@ -129,10 +137,7 @@ public :
 
     virtual void SetUp()
     {
-        server = std::shared_ptr<MockServer>(new MockServer("4567"));
-        processStreamFunc = [](std::shared_ptr<utilities::ByteStream> stream)->async_cpp::async::AsyncResult {
-            return async_cpp::async::AsyncResult(stream);
-        };
+        server = std::make_shared<MockServer>("4567");
     }
 
     virtual void TearDown()
@@ -142,7 +147,6 @@ public :
 
     std::shared_ptr<MockServer> server;
     client::ServerInfo serverInfo;
-    std::function<async_cpp::async::AsyncResult(std::shared_ptr<utilities::ByteStream>)> processStreamFunc;
 };
 
 TEST_F(ClientTest, CONSTRUCTOR)
@@ -152,7 +156,7 @@ TEST_F(ClientTest, CONSTRUCTOR)
     } );
     //let server start
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    ASSERT_NO_THROW(Client(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048, processStreamFunc));
+    ASSERT_NO_THROW(Client(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048));
     thread.join();
     ASSERT_FALSE(server->wasError);
 }
@@ -169,7 +173,7 @@ TEST_F(ClientTest, SEND)
         //let server start
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         std::shared_ptr<Client> client;
-        ASSERT_NO_THROW(client = std::shared_ptr<Client>(new Client(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048, processStreamFunc)));
+        ASSERT_NO_THROW(client = std::make_shared<Client>(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048));
         //let client have a chance to see if it triggers a send with no data
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         ASSERT_FALSE(successfulReceive);
@@ -189,9 +193,9 @@ TEST_F(ClientTest, SEND)
         //let server start
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
         std::shared_ptr<Client> client;
-        ASSERT_NO_THROW(client = std::shared_ptr<Client>(new Client(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048, processStreamFunc)));
+        ASSERT_NO_THROW(client = std::make_shared<Client>(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048));
         char sendBuf[] = "Sending to server";
-        std::shared_ptr<utilities::ByteStream> stream(new utilities::ByteStream(sendBuf, sizeof(sendBuf)));
+        auto stream = std::make_shared<utilities::ByteStream>(sendBuf, sizeof(sendBuf));
         ASSERT_NO_THROW(client->request(stream));
         thread.join();
         ASSERT_FALSE(server->wasError);
@@ -207,9 +211,10 @@ TEST_F(ClientTest, SEND_RECEIVE)
     //let server start
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
     std::shared_ptr<Client> client;
-    ASSERT_NO_THROW(client = std::shared_ptr<Client>(new Client(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048, processStreamFunc)));
+    ASSERT_NO_THROW(client = std::make_shared<Client>(serverInfo, std::shared_ptr<utilities::ByteStream>(), 2048));
+    client->setProcessor(std::make_shared<ClientProcessor>());
     char sendBuf[] = "Sending to server";
-    std::shared_ptr<utilities::ByteStream> stream(new utilities::ByteStream(sendBuf, sizeof(sendBuf)));
+    auto stream = std::make_shared<utilities::ByteStream>(sendBuf, sizeof(sendBuf));
     async_cpp::async::AsyncResult result;
     ASSERT_NO_THROW(result = client->request(stream).get());
     ASSERT_FALSE(server->wasError);

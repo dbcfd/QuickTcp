@@ -1,7 +1,7 @@
 #pragma once
 
-#include "client/Platform.h"
-#include "client/ServerInfo.h"
+#include "quicktcp/client/Platform.h"
+#include "quicktcp/client/ServerInfo.h"
 
 #include "async/Async.h"
 

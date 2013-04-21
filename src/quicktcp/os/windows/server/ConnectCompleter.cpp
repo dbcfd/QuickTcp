@@ -1,8 +1,8 @@
-#include "os/windows/server/ConnectCompleter.h"
-#include "os/windows/server/Overlap.h"
-#include "os/windows/server/IEventHandler.h"
-#include "os/windows/server/ReceiveCompleter.h"
-#include "os/windows/server/Socket.h"
+#include "quicktcp/os/windows/server/ConnectCompleter.h"
+#include "quicktcp/os/windows/server/Overlap.h"
+#include "quicktcp/os/windows/server/IEventHandler.h"
+#include "quicktcp/os/windows/server/ReceiveCompleter.h"
+#include "quicktcp/os/windows/server/Socket.h"
 
 #include <minwinbase.h>
 #include <string>

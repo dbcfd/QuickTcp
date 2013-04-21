@@ -1,6 +1,6 @@
 #pragma once
-#include "Utilities/Platform.h"
-#include "Utilities/ByteStream.h"
+#include "quicktcp/utilities/Platform.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 namespace quicktcp {
 namespace utilities {

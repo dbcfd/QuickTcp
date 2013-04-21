@@ -1,10 +1,10 @@
-#include "os/windows/server/ReceiveCompleter.h"
-#include "os/windows/server/IEventHandler.h"
-#include "os/windows/server/ResponseCompleter.h"
-#include "os/windows/server/Socket.h"
-#include "os/windows/server/Overlap.h"
+#include "quicktcp/os/windows/server/ReceiveCompleter.h"
+#include "quicktcp/os/windows/server/IEventHandler.h"
+#include "quicktcp/os/windows/server/ResponseCompleter.h"
+#include "quicktcp/os/windows/server/Socket.h"
+#include "quicktcp/os/windows/server/Overlap.h"
 
-#include "utilities/ByteStream.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 #include <minwinbase.h>
 #include <string>

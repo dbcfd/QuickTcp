@@ -1,7 +1,7 @@
 #pragma once
 
-#include "os/windows/server/Platform.h"
-#include "os/windows/server/Winsock2.h"
+#include "quicktcp/os/windows/server/Platform.h"
+#include "quicktcp/os/windows/server/Winsock2.h"
 
 #include <memory>
 

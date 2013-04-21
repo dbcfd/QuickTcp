@@ -1,17 +1,17 @@
-#include "os/windows/server/Server.h"
-#include "os/windows/server/Overlap.h"
-#include "os/windows/server/IEventHandler.h"
-#include "os/windows/server/ConnectCompleter.h"
-#include "os/windows/server/ReceiveCompleter.h"
-#include "os/windows/server/ResponseCompleter.h"
-#include "os/windows/server/SendCompleter.h"
-#include "os/windows/server/Socket.h"
+#include "quicktcp/os/windows/server/Server.h"
+#include "quicktcp/os/windows/server/Overlap.h"
+#include "quicktcp/os/windows/server/IEventHandler.h"
+#include "quicktcp/os/windows/server/ConnectCompleter.h"
+#include "quicktcp/os/windows/server/ReceiveCompleter.h"
+#include "quicktcp/os/windows/server/ResponseCompleter.h"
+#include "quicktcp/os/windows/server/SendCompleter.h"
+#include "quicktcp/os/windows/server/Socket.h"
 
 #include "async/AsyncResult.h"
 
-#include "server/IResponder.h"
+#include "quicktcp/server/IResponder.h"
 
-#include "utilities/ByteStream.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 #include "workers/IManager.h"
 #include "workers/BasicTask.h"
@@ -42,7 +42,7 @@ public:
 
     virtual void authenticateConnection(std::shared_ptr<utilities::ByteStream> stream, Overlap* overlap) final
     {
-        manager->run(std::shared_ptr<async_cpp::workers::Task>(new async_cpp::workers::BasicTask(
+        manager->run(std::make_shared<async_cpp::workers::BasicTask>(
             [this, stream, overlap]()->void {
                 auto completer = std::static_pointer_cast<ReceiveCompleter>(overlap->completer());
                 try {
@@ -61,7 +61,7 @@ public:
                     completer->disconnect();
                 }
             }
-        ) ) );
+        ) );
     }
 
     virtual void queueAccept(std::shared_ptr<ConnectCompleter> completer) final
@@ -77,7 +77,7 @@ public:
 
     virtual void createResponse(std::shared_ptr<utilities::ByteStream> stream, Overlap* overlap)
     {
-        manager->run(std::shared_ptr<async_cpp::workers::Task>(new async_cpp::workers::BasicTask(
+        manager->run(std::make_shared<async_cpp::workers::BasicTask>(
             [this, stream, overlap]()->void {
                 auto completer = std::static_pointer_cast<ResponseCompleter>(overlap->completer());
                 try {
@@ -90,7 +90,7 @@ public:
                 }
                 PostQueuedCompletionStatus(server.getIOCompletionPort(), 0, 0, overlap);
             }
-        ) ) );
+        ) );
     }
     virtual void reportError(const std::string& error)
     {
@@ -134,7 +134,7 @@ Server::Server(const quicktcp::server::ServerInfo& info,
         std::shared_ptr<quicktcp::server::IResponder> responder) :
     quicktcp::server::IServer(info, mgr, responder), mRunning(true), mWaitingForEvents(false)
 {
-    mEventHandler = std::shared_ptr<IEventHandler>(new EventHandler(*this, mResponder, mManager));
+    mEventHandler = std::make_shared<EventHandler>(*this, mResponder, mManager);
     assert(nullptr != mgr);
     assert(nullptr != responder);
 
@@ -150,7 +150,7 @@ Server::Server(const quicktcp::server::ServerInfo& info,
 
     for(size_t i = 0; i < info.maxConnections(); ++i)
     {
-        mConnectionSockets.emplace_back(new Socket());
+        mConnectionSockets.emplace_back(std::make_shared<Socket>());
         auto completer = std::make_shared<ConnectCompleter>(mConnectionSockets.back(), mEventHandler);
         mEventHandler->queueAccept(completer);
     }

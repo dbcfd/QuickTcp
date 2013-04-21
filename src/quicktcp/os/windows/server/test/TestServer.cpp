@@ -1,14 +1,14 @@
-#include "os/windows/server/Server.h"
-#include "os/windows/server/Winsock2.h"
+#include "quicktcp/os/windows/server/Server.h"
+#include "quicktcp/os/windows/server/Winsock2.h"
 
 #include "async/AsyncResult.h"
 
 #include "workers/Manager.h"
 
-#include "server/IResponder.h"
-#include "server/ServerInfo.h"
+#include "quicktcp/server/IResponder.h"
+#include "quicktcp/server/ServerInfo.h"
 
-#include "utilities/ByteStream.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 #pragma warning(disable:4251 4275)
 #include <gtest/gtest.h>
@@ -58,7 +58,7 @@ public:
         char recvData[200];
         WSABUF dataBuffer;
         dataBuffer.buf = sendData;
-        dataBuffer.len = strlen(sendData);
+        dataBuffer.len = (ULONG)strlen(sendData);
         WSABUF recvBuffer;
         recvBuffer.buf = recvData;
         recvBuffer.len = 200;
@@ -89,7 +89,7 @@ public:
     {
         connect(port, [this, afterSend](SOCKET socket)->void {
             char buffer[] = "Data sent to server";
-            int len = strlen(buffer);
+            auto len = (int)strlen(buffer);
             int flags = 0;
             if(SOCKET_ERROR == send(socket, buffer, len, flags))
             {
@@ -131,7 +131,7 @@ public:
     {
         attemptedResponse = true;
         std::string result("response from server");
-        stream = std::shared_ptr<utilities::ByteStream>(new utilities::ByteStream((void*)&result[0], result.size()));
+        stream = std::make_shared<utilities::ByteStream>((void*)&result[0], result.size());
         return async_cpp::async::AsyncResult(stream);
     }
 
@@ -161,9 +161,9 @@ public:
 
     virtual void SetUp()
     {
-        manager = std::shared_ptr<async_cpp::workers::IManager>(new async_cpp::workers::Manager(5));
+        manager = std::make_shared<async_cpp::workers::Manager>(5);
         port = "4569";
-        responder = std::shared_ptr<Responder>(new Responder());
+        responder = std::make_shared<Responder>();
     }
 
     virtual void TearDown()

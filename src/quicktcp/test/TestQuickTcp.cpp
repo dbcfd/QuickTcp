@@ -1,11 +1,11 @@
 #include "quicktcp/QuickTcp.h"
-#include "client/IClient.h"
-#include "server/IServer.h"
-#include "server/IResponder.h"
+#include "quicktcp/client/IClient.h"
+#include "quicktcp/server/IServer.h"
+#include "quicktcp/server/IResponder.h"
 
 #include "async/AsyncResult.h"
 #include "workers/Manager.h"
-#include "utilities/ByteStream.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 #pragma warning(disable:4251 4275)
 #include <gtest/gtest.h>
@@ -46,12 +46,12 @@ class QuickTcpTest : public testing::Test
 public:
     virtual void SetUp()
     {
-        manager = std::shared_ptr<async_cpp::workers::IManager>(new async_cpp::workers::Manager(1));
-        responder = std::shared_ptr<Responder>(new Responder());
+        manager = std::make_shared<async_cpp::workers::IManager>(1);
+        responder = std::make_shared<Responder>();
         processFunc = [](std::shared_ptr<utilities::ByteStream> stream) -> async_cpp::async::AsyncResult {
             return async_cpp::async::AsyncResult(stream);
         };
-        stream = std::shared_ptr<utilities::ByteStream>(new utilities::ByteStream(MESSAGE, sizeof(MESSAGE)));
+        stream = std::make_shared<utilities::ByteStream>(MESSAGE, sizeof(MESSAGE));
     }
 
     virtual void TearDown()

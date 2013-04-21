@@ -50,5 +50,5 @@ if(BUILD_TESTS)
 	enable_testing()
 endif()
 #project source
-find_package(async.cpp 0.6.0 REQUIRED)
+find_package(async.cpp 0.7.0 REQUIRED)
 add_subdirectory(src)

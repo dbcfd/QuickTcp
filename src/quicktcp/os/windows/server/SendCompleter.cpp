@@ -1,8 +1,8 @@
-#include "os/windows/server/SendCompleter.h"
-#include "os/windows/server/Overlap.h"
-#include "os/windows/server/Socket.h"
+#include "quicktcp/os/windows/server/SendCompleter.h"
+#include "quicktcp/os/windows/server/Overlap.h"
+#include "quicktcp/os/windows/server/Socket.h"
 
-#include "utilities/ByteStream.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 namespace quicktcp {
 namespace os {

@@ -1,9 +1,10 @@
 #pragma once
 
-#include "os/windows/server/Platform.h"
-#include "os/windows/server/Winsock2.h"
+#include "quicktcp/os/windows/server/Platform.h"
+#include "quicktcp/os/windows/server/Winsock2.h"
 
 #include <memory>
+#include <vector>
 
 namespace quicktcp {
 
@@ -45,7 +46,7 @@ private:
     WSABUF mWsaBuffer;
     DWORD mFlags;
     DWORD mBytes;
-    std::shared_ptr<char> mBuffer;
+    std::vector<char> mBuffer;
     std::shared_ptr<utilities::ByteStream> mStream;
     std::shared_ptr<ICompleter> mCompleter;
 };

@@ -1,5 +1,5 @@
-#include "os/windows/client/Socket.h"
-#include "os/windows/client/IOverlap.h"
+#include "quicktcp/os/windows/client/Socket.h"
+#include "quicktcp/os/windows/client/IOverlap.h"
 
 namespace quicktcp {
 namespace os {

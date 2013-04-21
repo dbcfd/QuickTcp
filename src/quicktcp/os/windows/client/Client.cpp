@@ -1,11 +1,11 @@
-#include "os/windows/client/Client.h"
-#include "os/windows/client/ReceiveOverlap.h"
-#include "os/windows/client/SendOverlap.h"
-#include "os/windows/client/IEventHandler.h"
+#include "quicktcp/os/windows/client/Client.h"
+#include "quicktcp/os/windows/client/ReceiveOverlap.h"
+#include "quicktcp/os/windows/client/SendOverlap.h"
+#include "quicktcp/os/windows/client/IEventHandler.h"
 
 #include "async/AsyncResult.h"
 
-#include "utilities/ByteStream.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 #include <string>
 

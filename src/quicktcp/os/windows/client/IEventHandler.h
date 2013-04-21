@@ -1,7 +1,7 @@
 #pragma once
 
-#include "os/windows/client/Platform.h"
-#include "os/windows/client/IOverlap.h"
+#include "quicktcp/os/windows/client/Platform.h"
+#include "quicktcp/os/windows/client/IOverlap.h"
 
 #include "async/Async.h"
 

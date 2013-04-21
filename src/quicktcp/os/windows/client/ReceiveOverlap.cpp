@@ -1,7 +1,7 @@
-#include "os/windows/client/ReceiveOverlap.h"
-#include "os/windows/client/Socket.h"
+#include "quicktcp/os/windows/client/ReceiveOverlap.h"
+#include "quicktcp/os/windows/client/Socket.h"
 
-#include "utilities/ByteStream.h"
+#include "quicktcp/utilities/ByteStream.h"
 
 #include <string>
 

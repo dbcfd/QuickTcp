@@ -1,6 +1,6 @@
 #pragma once
-#include "Utilities/Platform.h"
-#include "Utilities/ISerializable.h"
+#include "quicktcp/utilities/Platform.h"
+#include "quicktcp/utilities/ISerializable.h"
 
 #include <memory>
 

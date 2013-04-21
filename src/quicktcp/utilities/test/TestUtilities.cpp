@@ -1,5 +1,5 @@
-#include "utilities/BinarySerializer.h"
-#include "utilities/ISerializable.h"
+#include "quicktcp/utilities/BinarySerializer.h"
+#include "quicktcp/utilities/ISerializable.h"
 
 #pragma warning(disable:4251 4275)
 #include <gtest/gtest.h>
@@ -189,9 +189,9 @@ public:
         {
             for(size_t i = 0; ret && i < len; ++i)
             {
-                BCOChildTestObject* obj = new BCOChildTestObject();
+                auto obj = std::make_shared<BCOChildTestObject>();
                 ret = ret && obj->readBinary(serializer);
-                if(ret) mChildren.push_back(obj);
+                if(ret) mChildren.emplace_back(obj);
             }
         }
         return ret;
@@ -202,9 +202,9 @@ public:
 		serializer.writeT<int>(mInt);
 		serializer.writeT<double>(mDouble);
         serializer.writeT<size_t>(mChildren.size());
-        for(std::vector<BCOChildTestObject*>::const_iterator iter = mChildren.begin(); iter != mChildren.end(); ++iter)
+        for(auto child : mChildren)
         {
-            (*iter)->writeBinary(serializer);
+            child->writeBinary(serializer);
         }
 	}
 
@@ -215,7 +215,7 @@ public:
 
 	int mInt;
 	double mDouble;
-    std::vector<BCOChildTestObject*> mChildren;
+    std::vector<std::shared_ptr<BCOChildTestObject>> mChildren;
 };
 
 class SerializableTest : public testing::Test
@@ -399,10 +399,8 @@ TEST_F(SerializableTest, BAD_READ_FROM)
 TEST_F(SerializableTest, DATA_CHILD_OBJECTS)
 {
 	BCOParentTestObject parentObj(intVal, doubleVal);
-    BCOChildTestObject* childObj1 = new BCOChildTestObject(stringVal, floatVal, floatSize);
-    BCOChildTestObject* childObj2 = new BCOChildTestObject(stringVal, floatVal, floatSize);
-    parentObj.mChildren.push_back(childObj1);
-    parentObj.mChildren.push_back(childObj2);
+    parentObj.mChildren.emplace_back(std::make_shared<BCOChildTestObject>(stringVal, floatVal, floatSize));
+    parentObj.mChildren.emplace_back(std::make_shared<BCOChildTestObject>(stringVal, floatVal, floatSize));
 
     BinarySerializer serializer;
     parentObj.writeBinary(serializer);
