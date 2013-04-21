@@ -21,7 +21,7 @@ IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<IEventHandler> 
     mBuffer = std::shared_ptr<char>(new char[bufferSize]);
     memset(mBuffer.get(), 0, bufferSize);
     mWsaBuffer.buf = mBuffer.get();
-    mWsaBuffer.len = bufferSize;
+    mWsaBuffer.len = (ULONG)bufferSize;
 }
 
 //------------------------------------------------------------------------------
@@ -36,7 +36,7 @@ IOverlap::IOverlap(std::shared_ptr<Socket> sckt, std::shared_ptr<IEventHandler> 
     mBuffer = std::shared_ptr<char>(new char[stream->size()]);
     memcpy(mBuffer.get(), stream->buffer(), stream->size());
     mWsaBuffer.buf = mBuffer.get();
-    mWsaBuffer.len = stream->size();
+    mWsaBuffer.len = (ULONG)stream->size();
 }
 
 //------------------------------------------------------------------------------

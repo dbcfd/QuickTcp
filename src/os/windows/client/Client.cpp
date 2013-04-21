@@ -100,7 +100,7 @@ void Client::connect()
     if(mAuthentication)
     {
         dataBuffer.buf = (char*)mAuthentication->buffer();
-        dataBuffer.len = mAuthentication->size();
+        dataBuffer.len = (ULONG)mAuthentication->size();
     }
     std::vector<int> errorsReturned;
     //multiple addresses may be returned work through them all

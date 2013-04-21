@@ -1,11 +1,11 @@
-#include "Client/Client.h"
+#include "Server/Server.h"
 
 #pragma warning(disable:4251 4275)
 #include <gtest/gtest.h>
 
-using namespace markit;
+using namespace quicktcp::server;
 
-TEST(CLIENT_TEST, CONSTRUCTOR)
+TEST(SERVER_TEST, CONSTRUCTOR)
 {
 
 }

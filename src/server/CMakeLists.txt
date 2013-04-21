@@ -4,7 +4,7 @@ file(GLOB HEADERS "*.h")
 
 file(GLOB SOURCES "*.cpp")
 
-set(async.cpp_VERSION 0.5.0)
+set(async.cpp_VERSION 0.6.0)
 find_package(async.cpp REQUIRED)
 SET (DEPENDENCIES Utilities ${ASYNC.CPP_LIBRARIES})
 
@@ -21,7 +21,7 @@ install (TARGETS ${TARGET}
 	ARCHIVE DESTINATION ${BASE_DIRECTORY}/install/${TARGET}/${version}/lib)
 
 include(DllInstaller)
-_INSTALL_LIBRARIES(${TARGET} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${ASYNC.CPP_LIBRARIES})
+_COPY_DLLS(${TARGET} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${ASYNC.CPP_LIBRARIES})
 
 SetVSTargetProperties(${TARGET})
 
