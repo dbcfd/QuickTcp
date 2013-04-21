@@ -23,7 +23,7 @@ public:
     SendOverlap(std::shared_ptr<Socket> sckt, 
         std::shared_ptr<utilities::ByteStream> stream,
         std::shared_ptr<IEventHandler> handler);
-    ~SendOverlap();
+    virtual ~SendOverlap();
 
     virtual void handleIOCompletion(const size_t nbBytes);
 

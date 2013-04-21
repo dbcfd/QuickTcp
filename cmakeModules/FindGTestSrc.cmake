@@ -9,14 +9,14 @@
 #
 #  gtest_DIR - Set to location of DCL if not in PATH or current directory ThirdParty
 #  gtest_VERSION - Version of DCL to look for
-#  THIRDPARTY_DIR - Location of third party directory to perform checkouts int
+#  THIRDPARTY_LIB_DIR - Location of third party directory to perform checkouts int
 #
 
 macro(_FIND_GTEST_HEADER _include_dir)
 	find_path(gtest_include_dir NAMES gtest/gtest.h
 		HINTS
 			${gtest_DIR}/include
-			${THIRDPARTY_DIR}/gtest-${gtest_VERSION}/include
+			${THIRDPARTY_LIB_DIR}/gtest-${gtest_VERSION}/include
 	)
 	set(${_include_dir} ${gtest_include_dir})
 endmacro()

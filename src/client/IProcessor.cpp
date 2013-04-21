@@ -1,17 +1,13 @@
-#include "os/windows/client/IEventHandler.h"
+#include "client/IProcessor.h"
 
 namespace quicktcp {
-namespace os {
-namespace windows {
 namespace client {
 
 //------------------------------------------------------------------------------
-IEventHandler::~IEventHandler()
+IProcessor::~IProcessor()
 {
 
 }
 
-}
-}
 }
 }

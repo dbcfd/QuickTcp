@@ -25,7 +25,7 @@ namespace windows {
 namespace server {
 
 class IEventHandler;
-struct ConnectOverlap;
+struct Overlap;
 class Socket;
 
 /**
@@ -52,7 +52,7 @@ public:
     /**
      * Create the asynchronous socket and functionality necessary for AcceptEx
      */
-    void prepareForClientConnection(ConnectOverlap& overlap);
+    void prepareForClientConnection(Overlap& overlap);
 
     inline HANDLE getIOCompletionPort() const;
 
@@ -61,6 +61,7 @@ private:
      * Create the socket that we listen on for new connections
      */
     void createServerSocket();
+    void cleanupOverlaps();
 
     std::shared_ptr<IEventHandler> mEventHandler;
 
@@ -70,8 +71,8 @@ private:
 
     SOCKET mSocket; //this is the socket we listen for connections on
     HANDLE mIOCP;
-    std::vector<std::shared_ptr<ConnectOverlap>> mOverlaps;
     std::condition_variable mShutdownSignal;
+    std::vector<std::shared_ptr<Socket>> mConnectionSockets;
 };
 
 //inline implementations

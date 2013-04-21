@@ -1,7 +1,7 @@
-#include "os/windows/server/ConnectOverlap.h"
+#include "os/windows/server/ConnectCompleter.h"
+#include "os/windows/server/Overlap.h"
 #include "os/windows/server/IEventHandler.h"
-#include "os/windows/server/ReceiveOverlap.h"
-#include "os/windows/server/ResponseOverlap.h"
+#include "os/windows/server/ReceiveCompleter.h"
 #include "os/windows/server/Socket.h"
 
 #include <minwinbase.h>
@@ -13,42 +13,35 @@ namespace windows {
 namespace server {
 
 //------------------------------------------------------------------------------
-ConnectOverlap::ConnectOverlap(std::shared_ptr<Socket> sckt,
-                               std::shared_ptr<IEventHandler> evHandler,
-                               HANDLE mainIOCP) 
-    : IOverlap(sckt, evHandler, evHandler->connectBufferSize()), mPendingDisconnect(false), mReceiver(nullptr)
-{
-    if(mainIOCP != CreateIoCompletionPort((HANDLE)mSocket->socket(), mainIOCP, (ULONG_PTR)this, 0))
-    {
-        auto error = std::string("CreateIoCompletionPort Error: ") + std::to_string(WSAGetLastError());
-        throw(std::runtime_error(error));
-    }
-}
-
-//------------------------------------------------------------------------------
-ConnectOverlap::~ConnectOverlap()
+ConnectCompleter::ConnectCompleter(std::shared_ptr<Socket> sckt,
+                               std::shared_ptr<IEventHandler> evHandler) 
+    : ICompleter(sckt, evHandler), mPendingDisconnect(false), mReadyForDeletion(false)
 {
     
 }
 
 //------------------------------------------------------------------------------
-void ConnectOverlap::handleIOCompletion(const size_t nbBytes)
+ConnectCompleter::~ConnectCompleter()
 {
-    mFlags = 0;
-    if(WSAGetOverlappedResult(mSocket->socket(), this, &mBytes, FALSE, &mFlags))
+    
+}
+
+//------------------------------------------------------------------------------
+void ConnectCompleter::handleIOCompletion(Overlap& holder, const size_t nbBytes)
+{
+    if(holder.getOverlappedResult())
     {
-        ResetEvent(hEvent);
         if(mPendingDisconnect)
         {
             mPendingDisconnect = false;
-            mEventHandler->queueAccept(*this);
+            mEventHandler->queueAccept(std::static_pointer_cast<ConnectCompleter>(holder.completer()));
         }
         else
         {
             //handle the connection, only if the socket is valid, otherwise we're closing down
             if(mSocket->isValid())
             {
-                handleConnection();
+                handleConnection(holder);
             }
         }
     }
@@ -62,40 +55,47 @@ void ConnectOverlap::handleIOCompletion(const size_t nbBytes)
         }
         else
         {
-            transferBufferToStream(mBytes);
+            holder.transferBufferToStream();
         }
     }
 }
 
 //------------------------------------------------------------------------------
-void ConnectOverlap::reset()
+void ConnectCompleter::reset(Overlap* holder)
 {
     if(mReceiver)
     {
         mPendingDisconnect = true;
-        mSocket->disconnect(this);
+        mReadyForDeletion = mSocket->disconnect(holder);
         mEventHandler->connectionClosed();
     }
     mReceiver = nullptr;
 }
 
 //------------------------------------------------------------------------------
-void ConnectOverlap::handleConnection()
+void ConnectCompleter::handleConnection(Overlap& holder)
 {
     BOOL opt = TRUE;
     setsockopt(mSocket->socket(), SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(BOOL));
 
-    mReceiver = new ReceiveOverlap(mSocket, mEventHandler, std::bind(&ConnectOverlap::reset, this));
+    auto completer = holder.completer();
+    auto resetFunc = [this, completer]()->void {
+        auto nextHolder = new Overlap(completer, mEventHandler->connectBufferSize());
+        reset(nextHolder);
+    };
 
-    mEventHandler->authenticateConnection(transferStream(), *mReceiver);
+    mReceiver = std::make_shared<ReceiveCompleter>(mSocket, mEventHandler, resetFunc);
+    auto recvHolder = new Overlap(mReceiver, mEventHandler->responseBufferSize());
+
+    mEventHandler->authenticateConnection(holder.transferStream(), recvHolder);
 }
 
 //------------------------------------------------------------------------------
-void ConnectOverlap::waitForDisconnect()
+void ConnectCompleter::waitForDisconnect(Overlap& holder)
 {
     if(mPendingDisconnect)
     {
-        WSAGetOverlappedResult(mSocket->socket(), this, &mBytes, FALSE, &mFlags);
+        holder.getOverlappedResult();
     }
 }
 

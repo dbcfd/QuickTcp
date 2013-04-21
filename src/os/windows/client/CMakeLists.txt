@@ -4,19 +4,20 @@ file(GLOB HEADERS "*.h")
 
 file(GLOB SOURCES "*.cpp")
 
-set(async.cpp_VERSION 0.6.0)
-find_package(async.cpp REQUIRED)
+include_directories(${async.cpp_INCLUDE_DIRS})
 find_package(Winsock2)
-SET (DEPENDENCIES ${WINSOCK2_LIBRARIES} ${ASYNC.CPP_LIBRARIES} Client Utilities)
+SET (DEPENDENCIES ${WINSOCK2_LIBRARIES} ${async.cpp_LIBRARIES} Client Utilities)
 
-add_library (${TARGET} ${LIBRARY_BUILD_TYPE} ${HEADERS} ${SOURCES}) 
+add_library (${TARGET} ${HEADERS} ${SOURCES}) 
 target_link_libraries (${TARGET} ${DEPENDENCIES})
 
 set_target_properties (${TARGET} PROPERTIES
-    SOVERSION ${PROJECT_SO_VERSION})
+    SOVERSION ${PROJECT_SO_VERSION}
+	DEBUG_OUTPUT_NAME ${TARGET}${DEBUG_LIB_CONVENTION}
+	OUTPUT_NAME ${TARGET}${LIB_CONVENTION})
 
 include(DllInstaller)
-_COPY_DLLS(${TARGET} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${ASYNC.CPP_LIBRARIES})
+_COPY_DLLS(${TARGET} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${async.cpp_LIBRARIES})
 
 SetVSTargetProperties(${TARGET})
 

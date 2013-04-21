@@ -39,7 +39,7 @@ public:
 
     bool isConnected;
 
-    virtual std::future<async_cpp::async::AsyncResult> request(std::shared_ptr<utilities::ByteStream> stream)
+    virtual std::future<async_cpp::async::AsyncResult> request(std::shared_ptr<utilities::ByteStream> stream) final
     {
         std::promise<async_cpp::async::AsyncResult> promise;
         promise.set_value(async_cpp::async::AsyncResult(std::shared_ptr<void>(new bool(true))));

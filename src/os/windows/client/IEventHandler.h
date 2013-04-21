@@ -3,13 +3,7 @@
 #include "os/windows/client/Platform.h"
 #include "os/windows/client/IOverlap.h"
 
-#include<future>
-
-namespace async_cpp {
-namespace async {
-class AsyncResult;
-}
-}
+#include "async/Async.h"
 
 namespace quicktcp {
 namespace os {
@@ -22,8 +16,9 @@ class Socket;
 class IEventHandler
 {
 public:
+    virtual ~IEventHandler();
     virtual void createReceiveOverlap(std::shared_ptr<Socket> socket, std::promise<async_cpp::async::AsyncResult>& promise) = 0;
-    virtual async_cpp::async::AsyncResult processStream(std::shared_ptr<utilities::ByteStream> stream) = 0;
+    virtual async_cpp::async::AsyncFuture processStream(std::shared_ptr<utilities::ByteStream> stream) = 0;
 };
 
 //Inline Implementations

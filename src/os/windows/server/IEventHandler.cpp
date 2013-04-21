@@ -5,6 +5,12 @@ namespace os {
 namespace windows {
 namespace server {
 
+//------------------------------------------------------------------------------
+IEventHandler::~IEventHandler()
+{
+
+}
+
 }
 }
 }

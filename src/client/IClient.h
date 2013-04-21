@@ -3,16 +3,7 @@
 #include "client/Platform.h"
 #include "client/ServerInfo.h"
 
-#include <functional>
-#include <future>
-#include <memory>
-#include <thread>
-
-namespace async_cpp {
-namespace async {
-class AsyncResult;
-}
-}
+#include "async/Async.h"
 
 namespace quicktcp {
 
@@ -22,29 +13,32 @@ class ByteStream;
 
 namespace client {
 
+class IProcessor;
+
 class CLIENT_API IClient {
 public:
     IClient(const ServerInfo& info, 
         std::shared_ptr<utilities::ByteStream> authentication, 
-        const size_t bufferSize,
-        std::function<async_cpp::async::AsyncResult(std::shared_ptr<utilities::ByteStream>)> processStreamFunc);
+        const size_t bufferSize);
+    virtual ~IClient();
 
-    virtual std::future<async_cpp::async::AsyncResult> request(std::shared_ptr<utilities::ByteStream> stream) = 0;
+    virtual async_cpp::async::AsyncFuture request(std::shared_ptr<utilities::ByteStream> stream) = 0;
     virtual void disconnect() = 0;
 
     inline size_t bufferSize() const;
-    inline std::function<async_cpp::async::AsyncResult(std::shared_ptr<utilities::ByteStream>)> processStreamFunction() const;
+    inline void setProcessor(std::shared_ptr<IProcessor> processor);
 
 protected:
+    async_cpp::async::AsyncFuture process(std::shared_ptr<utilities::ByteStream> stream) const;
+
     std::shared_ptr<utilities::ByteStream> mAuthentication;
+    std::shared_ptr<IProcessor> mProcessor;
     size_t mBufferSize;
     std::thread mThread;
     ServerInfo mInfo;
-    std::function<async_cpp::async::AsyncResult(std::shared_ptr<utilities::ByteStream>)> mProcessStreamFunc;
 };
 
 //inline implementations
-
 //------------------------------------------------------------------------------
 size_t IClient::bufferSize() const
 {
@@ -52,9 +46,9 @@ size_t IClient::bufferSize() const
 }
 
 //------------------------------------------------------------------------------
-std::function<async_cpp::async::AsyncResult(std::shared_ptr<utilities::ByteStream>)> IClient::processStreamFunction() const
+void IClient::setProcessor(std::shared_ptr<IProcessor> processor)
 {
-    return mProcessStreamFunc;
+    mProcessor = processor;
 }
 
 }

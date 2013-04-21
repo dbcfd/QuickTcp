@@ -1,4 +1,5 @@
 #include "os/windows/client/Client.h"
+#include "quicktcp/Client.h"
 #include "os/windows/client/Winsock2.h"
 
 #include "async/AsyncResult.h"
@@ -116,6 +117,9 @@ public:
 
 using namespace os::windows::client;
 
+class ClientProcessor : public IProcessor {
+public:
+    
 class ClientTest : public testing::Test {
 public :
     ClientTest() : serverInfo("127.0.0.1", 4567)

@@ -15,10 +15,8 @@ namespace os {
 namespace windows {
 namespace server {
 
-struct ConnectOverlap;
-struct IOverlap;
-struct ReceiveOverlap;
-struct ResponseOverlap;
+class ConnectCompleter;
+struct Overlap;
 class Socket;
 
 /**
@@ -27,17 +25,17 @@ class Socket;
  */
 class IEventHandler {
 public:
-    virtual void queueAccept(ConnectOverlap& overlap) = 0;
-    virtual void authenticateConnection(std::shared_ptr<utilities::ByteStream> stream, ReceiveOverlap& overlap) = 0;
-    virtual void createResponse(std::shared_ptr<utilities::ByteStream> stream, ResponseOverlap& overlap) = 0;
+    virtual ~IEventHandler();
+
+    virtual void queueAccept(std::shared_ptr<ConnectCompleter> overlap) = 0;
+    virtual void authenticateConnection(std::shared_ptr<utilities::ByteStream> stream, Overlap* overlap) = 0;
+    virtual void createResponse(std::shared_ptr<utilities::ByteStream> stream, Overlap* overlap) = 0;
     virtual void sendResponse(std::shared_ptr<Socket> socket, std::shared_ptr<utilities::ByteStream> stream) = 0;
-    virtual void markForDeletion(IOverlap& overlap) = 0;
     virtual void reportError(const std::string& error) = 0;
     virtual void connectionClosed() = 0;
     virtual size_t connectBufferSize() const = 0;
     virtual size_t receiveBufferSize() const = 0;
     virtual size_t responseBufferSize() const = 0;
-    virtual void deleteMarkedOverlaps() = 0;
 };
 
 //inline implementations

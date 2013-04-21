@@ -1,5 +1,5 @@
-#include "Cache/Cacheable.h"
-#include "Cache/BinarySerializer.h"
+#include "utilities/BinarySerializer.h"
+#include "utilities/ISerializable.h"
 
 #pragma warning(disable:4251 4275)
 #include <gtest/gtest.h>
@@ -11,13 +11,13 @@ static size_t stringSize = strlen(stringVal);
 static float floatVal[] =  {0.56f, 0.18f, 0.29f, 0.44f, 0.90f};
 static size_t floatSize = 5;
 
-using namespace markit::cache;
+using namespace quicktcp::utilities;
 
-class BCOTestObject : public Cacheable
+class BCOTestObject : public ISerializable
 {
 public:
 	BCOTestObject(const int _intVal, const double _doubleVal, const std::string& _stringVal, float* floatArrayVal, size_t floatArraySize)
-		: Cacheable(),
+		: ISerializable(),
 		mInt(_intVal), mDouble(_doubleVal), mString(_stringVal), mFloatArraySize(floatArraySize)
 	{
 		mFloatArray = (float*)malloc(sizeof(float) * mFloatArraySize);
@@ -27,11 +27,11 @@ public:
 		}
 
 	}
-	BCOTestObject(const int version) : Cacheable(), mFloatArray(0), mFloatArraySize(0)
+	BCOTestObject(const int version) : ISerializable(), mFloatArray(0), mFloatArraySize(0)
 	{
 
 	}
-    BCOTestObject() : Cacheable(), mInt(intVal), mDouble(doubleVal), mString(stringVal), mFloatArraySize(floatSize)
+    BCOTestObject() : ISerializable(), mInt(intVal), mDouble(doubleVal), mString(stringVal), mFloatArraySize(floatSize)
     {
         mFloatArray = (float*)malloc(sizeof(float) * mFloatArraySize);
 		for(size_t i = 0; i < floatSize; ++i)
@@ -47,12 +47,12 @@ public:
         }
 	}
 
-	virtual bool ReadBinary(BinarySerializer& serializer)
+	virtual bool readBinary(BinarySerializer& serializer) final
 	{
-		bool ret = serializer.ReadT<int>(mInt);
-		ret = ret && serializer.ReadT<double>(mDouble);
-		ret = ret && serializer.ReadString(mString);
-		ret = ret && serializer.ReadT<size_t>(mFloatArraySize);
+		bool ret = serializer.readT<int>(mInt);
+		ret = ret && serializer.readT<double>(mDouble);
+		ret = ret && serializer.readString(mString);
+		ret = ret && serializer.readT<size_t>(mFloatArraySize);
         if(0 != mFloatArray)
         {
 		    free(mFloatArray);
@@ -62,7 +62,7 @@ public:
         {
             try {
 		        mFloatArray = (float*)malloc(sizeof(float)*mFloatArraySize);
-                ret = ret && serializer.ReadT<float>(mFloatArray, mFloatArraySize);
+                ret = ret && serializer.readT<float>(mFloatArray, mFloatArraySize);
             }
             catch(std::bad_alloc&)
             {
@@ -72,19 +72,19 @@ public:
         return ret;
 	}
 
-	virtual void WriteBinary(BinarySerializer& serializer) const
+	virtual void writeBinary(BinarySerializer& serializer) const final
 	{
-		serializer.WriteT<int>(mInt);
-		serializer.WriteT<double>(mDouble);
-		serializer.WriteString(mString);
-		serializer.WriteT<size_t>(mFloatArraySize);
+		serializer.writeT<int>(mInt);
+		serializer.writeT<double>(mDouble);
+		serializer.writeString(mString);
+		serializer.writeT<size_t>(mFloatArraySize);
         if(0 != mFloatArraySize)
         {
-		    serializer.WriteT<float>(mFloatArray, mFloatArraySize);
+		    serializer.writeT<float>(mFloatArray, mFloatArraySize);
         }
 	}
 
-    virtual size_t EstimateSize() const
+    virtual size_t estimateSize() const final
     {
         return sizeof(int) + sizeof(double) + sizeof(size_t) + mString.size() + sizeof(size_t) + sizeof(float)*mFloatArraySize;
     }
@@ -121,10 +121,10 @@ public:
         }
 	}
 
-	virtual bool ReadBinary(BinarySerializer& serializer)
+	virtual bool readBinary(BinarySerializer& serializer) final
 	{
-		bool ret = serializer.ReadString(mString);
-		ret = ret && serializer.ReadT<size_t>(mFloatArraySize);
+		bool ret = serializer.readString(mString);
+		ret = ret && serializer.readT<size_t>(mFloatArraySize);
         if(0 != mFloatArray)
         {
 		    free(mFloatArray);
@@ -134,21 +134,21 @@ public:
         {
 		    mFloatArray = (float*)malloc(sizeof(float)*mFloatArraySize);
         }
-		ret = ret && serializer.ReadT<float>(mFloatArray, mFloatArraySize);
+		ret = ret && serializer.readT<float>(mFloatArray, mFloatArraySize);
         return ret;
 	}
 
-	virtual void WriteBinary(BinarySerializer& serializer) const
+	virtual void writeBinary(BinarySerializer& serializer) const final
 	{
-		serializer.WriteString(mString);
-		serializer.WriteT<size_t>(mFloatArraySize);
+		serializer.writeString(mString);
+		serializer.writeT<size_t>(mFloatArraySize);
         if(0 != mFloatArraySize)
         {
-		    serializer.WriteT<float>(mFloatArray, mFloatArraySize);
+		    serializer.writeT<float>(mFloatArray, mFloatArraySize);
         }
 	}
 
-    virtual size_t EstimateSize() const
+    virtual size_t estimateSize() const final
     {
         return mString.size() + sizeof(float) * mFloatArraySize;
     }
@@ -158,16 +158,16 @@ public:
 	size_t mFloatArraySize;
 };
 
-class BCOParentTestObject : public Cacheable
+class BCOParentTestObject : public ISerializable
 {
 public: 
     BCOParentTestObject(const int intVal, const double doubleVal)
-		: Cacheable(),
+		: ISerializable(),
 		mInt(intVal), mDouble(doubleVal)
 	{
 
 	}
-	BCOParentTestObject() : Cacheable()
+	BCOParentTestObject() : ISerializable()
 	{
 
 	}
@@ -179,36 +179,36 @@ public:
         }
 	}
 
-	virtual bool ReadBinary(BinarySerializer& serializer)
+	virtual bool readBinary(BinarySerializer& serializer) final
 	{
-		bool ret = serializer.ReadT<int>(mInt);
-		ret = ret && serializer.ReadT<double>(mDouble);
+		bool ret = serializer.readT<int>(mInt);
+		ret = ret && serializer.readT<double>(mDouble);
 		size_t len = 0;
-        ret = ret && serializer.ReadT<size_t>(len);
+        ret = ret && serializer.readT<size_t>(len);
         if(ret && len > 0)
         {
             for(size_t i = 0; ret && i < len; ++i)
             {
                 BCOChildTestObject* obj = new BCOChildTestObject();
-                ret = ret && obj->ReadBinary(serializer);
+                ret = ret && obj->readBinary(serializer);
                 if(ret) mChildren.push_back(obj);
             }
         }
         return ret;
 	}
 
-	virtual void WriteBinary(BinarySerializer& serializer) const
+	virtual void writeBinary(BinarySerializer& serializer) const final
 	{
-		serializer.WriteT<int>(mInt);
-		serializer.WriteT<double>(mDouble);
-        serializer.WriteT<size_t>(mChildren.size());
+		serializer.writeT<int>(mInt);
+		serializer.writeT<double>(mDouble);
+        serializer.writeT<size_t>(mChildren.size());
         for(std::vector<BCOChildTestObject*>::const_iterator iter = mChildren.begin(); iter != mChildren.end(); ++iter)
         {
-            (*iter)->WriteBinary(serializer);
+            (*iter)->writeBinary(serializer);
         }
 	}
 
-    virtual size_t EstimateSize() const
+    virtual size_t estimateSize() const final
     {
         return sizeof(int) + sizeof(double) + sizeof(size_t) + sizeof(BCOChildTestObject) * mChildren.size();
     }
@@ -218,19 +218,19 @@ public:
     std::vector<BCOChildTestObject*> mChildren;
 };
 
-class CacheableTest : public testing::Test
+class SerializableTest : public testing::Test
 {
 public:
-	CacheableTest()
+	SerializableTest()
 	{
 
 	}
 
 	virtual void SetUp()
 	{
-        size_t bufferSize = sizeof(int) + sizeof(double) + 2*sizeof(size_t) + sizeof(char)*stringSize + sizeof(float)*floatSize;
+        bufferSize = sizeof(int) + sizeof(double) + 2*sizeof(size_t) + sizeof(char)*stringSize + sizeof(float)*floatSize;
 
-        char* buffer = (char*)malloc(sizeof(char) * bufferSize);
+        buffer = (char*)malloc(sizeof(char) * bufferSize);
         char* position = buffer;
 
         memcpy(position, &intVal, sizeof(int));
@@ -247,22 +247,22 @@ public:
         position += sizeof(float)*floatSize;
 
         ASSERT_EQ(bufferSize, position - buffer);
-
-        stream = std::shared_ptr<ByteStream>(new ByteStream((void*)buffer, bufferSize, true));
 	}
 
 	virtual void TearDown()
 	{
-        stream.reset();
+        free(buffer);
 	}
 
-    std::shared_ptr<ByteStream> stream;
+    char* buffer;
+    size_t bufferSize;
 };
 
-TEST_F(CacheableTest, READ_FROM)
+TEST_F(SerializableTest, READ_FROM)
 {	
+    BinarySerializer serializer(buffer, bufferSize);
 	BCOTestObject testObj;
-    ASSERT_TRUE(testObj.ReadFrom(stream));
+    ASSERT_TRUE(testObj.readBinary(serializer));
 
 	EXPECT_EQ(intVal, testObj.mInt);
 	EXPECT_EQ(doubleVal, testObj.mDouble);
@@ -274,21 +274,22 @@ TEST_F(CacheableTest, READ_FROM)
 	}
 }
 
-TEST_F(CacheableTest, WRITE_TO)
+TEST_F(SerializableTest, WRITE_TO)
 {
 	BCOTestObject testObj(intVal, doubleVal, stringVal, floatVal, floatSize);
 
-    std::shared_ptr<ByteStream> testStream = testObj.WriteTo();
+    BinarySerializer serializer;
+    testObj.writeBinary(serializer);
 
-    ASSERT_EQ(stream->Size(), testStream->Size());
+    ASSERT_EQ(bufferSize, serializer.size());
 
-    for(size_t i = 0; i < stream->Size(); ++i)
+    for(size_t i = 0; i < bufferSize; ++i)
     {
-        EXPECT_EQ(( (char*)stream->Buffer() )[i], ( (char*) testStream->Buffer() )[i]);
+        EXPECT_EQ(buffer[i], ( (char*) serializer.buffer() )[i]);
     }
 }
 
-TEST_F(CacheableTest, BAD_READ_FROM)
+TEST_F(SerializableTest, BAD_READ_FROM)
 {
     {
         size_t badBufferSize = sizeof(int) + 2*sizeof(double) + 2*sizeof(size_t) + sizeof(char)*stringSize + sizeof(float)*floatSize;
@@ -311,8 +312,9 @@ TEST_F(CacheableTest, BAD_READ_FROM)
         memcpy(position, &floatVal[0], sizeof(float)*floatSize);
         position += sizeof(float)*floatSize;
 
+        BinarySerializer serializer(badBuffer, badBufferSize, true);
         BCOTestObject testObj;
-        EXPECT_FALSE(testObj.ReadFrom(std::shared_ptr<ByteStream>(new ByteStream(badBuffer, badBufferSize, true))));
+        EXPECT_FALSE(testObj.readBinary(serializer));
     }
 
     {
@@ -335,8 +337,9 @@ TEST_F(CacheableTest, BAD_READ_FROM)
         memcpy(position, &floatVal[0], sizeof(float)*floatSize);
         position += sizeof(float)*floatSize;
 
+        BinarySerializer serializer(goodBuffer, goodBufferSize, true);
         BCOTestObject testObj;
-        EXPECT_FALSE(testObj.ReadFrom(std::shared_ptr<ByteStream>(new ByteStream(goodBuffer, goodBufferSize, true))));
+        EXPECT_FALSE(testObj.readBinary(serializer));
     }
 
     {
@@ -360,8 +363,9 @@ TEST_F(CacheableTest, BAD_READ_FROM)
         memcpy(position, &doubleVal, sizeof(double));
         position += sizeof(double);
 
+        BinarySerializer serializer(goodBuffer, goodBufferSize, true);
         BCOTestObject testObj;
-        EXPECT_FALSE(testObj.ReadFrom(std::shared_ptr<ByteStream>(new ByteStream(goodBuffer, goodBufferSize, true))));
+        EXPECT_FALSE(testObj.readBinary(serializer));
     }
 
     {
@@ -386,12 +390,13 @@ TEST_F(CacheableTest, BAD_READ_FROM)
         memcpy(position, &floatVal[0], sizeof(float)*floatSize);
         position += sizeof(float)*floatSize;
 
+        BinarySerializer serializer(goodBuffer, goodBufferSize, true);
         BCOTestObject testObj;
-        EXPECT_FALSE(testObj.ReadFrom(std::shared_ptr<ByteStream>(new ByteStream(goodBuffer, goodBufferSize, true))));
+        EXPECT_FALSE(testObj.readBinary(serializer));
     }
 }
 
-TEST_F(CacheableTest, DATA_CHILD_OBJECTS)
+TEST_F(SerializableTest, DATA_CHILD_OBJECTS)
 {
 	BCOParentTestObject parentObj(intVal, doubleVal);
     BCOChildTestObject* childObj1 = new BCOChildTestObject(stringVal, floatVal, floatSize);
@@ -399,7 +404,8 @@ TEST_F(CacheableTest, DATA_CHILD_OBJECTS)
     parentObj.mChildren.push_back(childObj1);
     parentObj.mChildren.push_back(childObj2);
 
-    std::shared_ptr<ByteStream> testStream = parentObj.WriteTo();
+    BinarySerializer serializer;
+    parentObj.writeBinary(serializer);
 
     size_t goodBufferSize = sizeof(int) + sizeof(double) + sizeof(size_t) + 
         2*sizeof(size_t) + 2*sizeof(char)*stringSize + 2*sizeof(float)*floatSize;
@@ -426,16 +432,16 @@ TEST_F(CacheableTest, DATA_CHILD_OBJECTS)
         position += sizeof(float)*floatSize;
     }
 
-    ASSERT_EQ(position - goodBuffer, testStream->Size());
+    ASSERT_EQ(position - goodBuffer, serializer.size());
     for(size_t i = 0; i < goodBufferSize; ++i)
     {
         char g = goodBuffer[i];
-        char t = ((char*)testStream->Buffer())[i];
-        EXPECT_EQ(goodBuffer[i], ((char*)testStream->Buffer())[i]);
+        char t = ((char*)serializer.buffer())[i];
+        EXPECT_EQ(goodBuffer[i], ((char*)serializer.buffer())[i]);
     }
 }
 
-TEST_F(CacheableTest, READ_FROM_CHILD_OBJECTS)
+TEST_F(SerializableTest, READ_FROM_CHILD_OBJECTS)
 {
     static const size_t NUM_CHILDREN = 2;
     size_t goodBufferSize = sizeof(int) + sizeof(double) + sizeof(size_t) + NUM_CHILDREN*sizeof(size_t) +
@@ -462,8 +468,9 @@ TEST_F(CacheableTest, READ_FROM_CHILD_OBJECTS)
         position += sizeof(float)*floatSize;
     }
 
+    BinarySerializer serializer(goodBuffer, goodBufferSize, true);
     BCOParentTestObject parentObj;
-    ASSERT_TRUE(parentObj.ReadFrom(std::shared_ptr<ByteStream>(new ByteStream(goodBuffer, goodBufferSize, true))));
+    ASSERT_TRUE(parentObj.readBinary(serializer));
     EXPECT_EQ(intVal, parentObj.mInt);
     EXPECT_EQ(doubleVal, parentObj.mDouble);
     EXPECT_EQ(NUM_CHILDREN, parentObj.mChildren.size());
@@ -479,7 +486,7 @@ TEST_F(CacheableTest, READ_FROM_CHILD_OBJECTS)
     }
 }
 
-TEST_F(CacheableTest, BAD_READ_FROM_CHILD)
+TEST_F(SerializableTest, BAD_READ_FROM_CHILD)
 {
     static const size_t NUM_CHILDREN = 2;
     {
@@ -509,8 +516,9 @@ TEST_F(CacheableTest, BAD_READ_FROM_CHILD)
             position += sizeof(float)*floatSize;
         }
 
+        BinarySerializer serializer(goodBuffer, goodBufferSize, true);
         BCOParentTestObject testObj;
-        EXPECT_FALSE(testObj.ReadFrom(std::shared_ptr<ByteStream>(new ByteStream(goodBuffer, goodBufferSize, true))));
+        EXPECT_FALSE(testObj.readBinary(serializer));
     }
 
     {
@@ -541,8 +549,9 @@ TEST_F(CacheableTest, BAD_READ_FROM_CHILD)
             position += sizeof(double);
         }
 
+        BinarySerializer serializer(goodBuffer, goodBufferSize, true);
         BCOParentTestObject testObj;
-        EXPECT_FALSE(testObj.ReadFrom(std::shared_ptr<ByteStream>(new ByteStream(goodBuffer, goodBufferSize, true))));
+        EXPECT_FALSE(testObj.readBinary(serializer));
     }
 
     {
@@ -570,32 +579,33 @@ TEST_F(CacheableTest, BAD_READ_FROM_CHILD)
             memcpy(position, &floatVal[0], sizeof(float)*floatSize);
             position += sizeof(float)*floatSize;
         }
-
+        
+        BinarySerializer serializer(goodBuffer, goodBufferSize, true);
         BCOParentTestObject testObj;
-        EXPECT_FALSE(testObj.ReadFrom(std::shared_ptr<ByteStream>(new ByteStream(goodBuffer, goodBufferSize, true))));
+        EXPECT_FALSE(testObj.readBinary(serializer));
     }
 }
 
-class SuperSizedBCO : public Cacheable
+class SuperSizedBCO : public ISerializable
 {
 public:
-    SuperSizedBCO() : Cacheable(),
+    SuperSizedBCO() : ISerializable(),
         mString("this is some long string that should exceed double the expected size, since we start the expected size of the object at only 5. We should have code that handles this case")
     {
 
     }
 
-    virtual bool ReadBinary(BinarySerializer& serializer)
+    virtual bool readBinary(BinarySerializer& serializer) final
 	{
-		return serializer.ReadString(mString);
+		return serializer.readString(mString);
 	}
 
-	virtual void WriteBinary(BinarySerializer& serializer) const
+	virtual void writeBinary(BinarySerializer& serializer) const final
 	{
-        serializer.WriteString(mString);
+        serializer.writeString(mString);
 	}
 
-    virtual size_t EstimateSize() const
+    virtual size_t estimateSize() const final
     {
         return size_t(5);
     }
@@ -603,11 +613,12 @@ public:
     std::string mString;
 };
 
-TEST_F(CacheableTest, WRITTEN_OBJ_EXCEEDS_DOUBLE_EXPECTED)
+TEST_F(SerializableTest, WRITTEN_OBJ_EXCEEDS_DOUBLE_EXPECTED)
 {
     SuperSizedBCO obj;
 
-    std::shared_ptr<ByteStream> testStream = obj.WriteTo();
+    BinarySerializer serializer;
+    obj.writeBinary(serializer);
 
     size_t stringSize = obj.mString.size();
     size_t expectedBufferSize = sizeof(size_t) + sizeof(char)*stringSize;
@@ -621,11 +632,11 @@ TEST_F(CacheableTest, WRITTEN_OBJ_EXCEEDS_DOUBLE_EXPECTED)
     memcpy(position, &obj.mString[0], sizeof(char)*stringSize);
     position += sizeof(char)*stringSize;
 
-    ASSERT_EQ(expectedBufferSize, testStream->Size());
+    ASSERT_EQ(expectedBufferSize, serializer.size());
 
     for(size_t i = 0; i < expectedBufferSize; ++i)
     {
-        EXPECT_EQ(expectedBuffer[i], ( (char*)testStream->Buffer() )[i]);
+        EXPECT_EQ(expectedBuffer[i], ( (char*)serializer.buffer() )[i]);
     }
 
     free(expectedBuffer);

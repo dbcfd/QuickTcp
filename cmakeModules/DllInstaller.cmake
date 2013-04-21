@@ -1,12 +1,15 @@
 function(_FIND_DLL_FOR _lib _dll)
 	get_filename_component(UTF_BASE_NAME ${_lib} NAME_WE)
 	get_filename_component(UTF_PATH ${_lib} PATH)
-	find_path(lib_dll_path NAMES ${UTF_BASE_NAME}.dll
+	find_path(${_lib}_dll_path NAMES ${UTF_BASE_NAME}.dll
 		HINTS
 			${UTF_PATH}
 			${UTF_PATH}/../bin
 	)
-	set(${_dll} "${lib_dll_path}/${UTF_BASE_NAME}.dll" CACHE INTERNAL "${_dll} Path")
+	if(${_lib}_dll_path)
+		set(${_dll} "${${_lib}_dll_path}/${UTF_BASE_NAME}.dll" CACHE INTERNAL "${_dll} Path")
+	endif()
+	mark_as_advanced(${_lib}_dll_path)
 endfunction()
 
 function(_COPY_DLL _target _library _config)

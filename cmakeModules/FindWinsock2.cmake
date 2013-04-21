@@ -5,13 +5,13 @@
 #  Winsock2_FOUND - Was library found
 #  Winsock2_INCLUDE_DIRS - the include directories
 #  Winsock2_LIBRARIES - Required libraries
+#  Winsock2_LINK_ONLY - Only use winsock2 library, not header
 #
 #  This module accepts the following variables
 #
-#  Winsock2_LIB_DIR - Set to location of DCL if not in PATH or current directory ThirdParty
-#  Winsock2_INC_DIR - Set to location of DCL if not in PATH or current directory ThirdParty
-#  Winsock2_VERSION - Version of DCL to look for
-#  THIRDPARTY_DIR - Location of third party directory to perform checkouts int
+#  Winsock2_LIB_DIR - Set to location of Winsock2 if not in PATH or current directory ThirdParty
+#  Winsock2_INC_DIR - Set to location of Winsock2 if not in PATH or current directory ThirdPartys
+#  THIRDPARTY_LIB_DIR - Location of third party directory to perform checkouts int
 #
 
 macro(_FIND_Winsock2_LIBRARY _var)
@@ -34,7 +34,7 @@ macro(_FIND_Winsock2_HEADER _include_dir)
 	find_path(winsock2_include_dir NAMES winsock2.h
 		HINTS
 			${Winsock2_INC_DIR}
-			${THIRDPARTY_DIR}/Winsock2/${Winsock2_VERSION}/include
+			${THIRDPARTY_LIB_DIR}/Winsock2/${Winsock2_FIND_VERSION}/include
 	)
 	set(${_include_dir} ${winsock2_include_dir})
 endmacro()
@@ -67,7 +67,7 @@ if(NOT WINSOCK2_FOUND)
     _Winsock2_APPEND_LIBRARIES(Winsock2_LIBRARIES Winsock2_LIBRARY)
     set(Winsock2_LIBRARIES ${Winsock2_LIBRARIES} CACHE INTERNAL "Winsock2 libraries")
     set(Winsock2_INCLUDE_DIRS ${Winsock2_INCLUDE_DIR} CACHE INTERNAL "Winsock2 include directories")
-    set(WINSOCK2_FOUND ${WINSOCK2_FOUND} CACHE INTERNAL "Winsock2 found")
+    set(Winsock2_FOUND ${WINSOCK2_FOUND} CACHE INTERNAL "Winsock2 found")
 endif()
 
 if(WINSOCK2_FOUND)

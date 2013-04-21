@@ -1,7 +1,8 @@
-#include "os/windows/server/ReceiveOverlap.h"
+#include "os/windows/server/ReceiveCompleter.h"
 #include "os/windows/server/IEventHandler.h"
-#include "os/windows/server/ResponseOverlap.h"
+#include "os/windows/server/ResponseCompleter.h"
 #include "os/windows/server/Socket.h"
+#include "os/windows/server/Overlap.h"
 
 #include "utilities/ByteStream.h"
 
@@ -14,38 +15,35 @@ namespace windows {
 namespace server {
 
 //------------------------------------------------------------------------------
-ReceiveOverlap::ReceiveOverlap(std::shared_ptr<Socket> sckt, 
+ReceiveCompleter::ReceiveCompleter(std::shared_ptr<Socket> sckt, 
         std::shared_ptr<IEventHandler> evHandler, 
         std::function<void(void)> onDisconnect) 
-    : IOverlap(sckt, evHandler, evHandler->receiveBufferSize()), mOnDisconnect(onDisconnect)
+    : ICompleter(sckt, evHandler), mOnDisconnect(onDisconnect), mReadyForDeletion(false)
 {
 
 }
 
 //------------------------------------------------------------------------------
-ReceiveOverlap::~ReceiveOverlap()
+ReceiveCompleter::~ReceiveCompleter()
 {
     
 }
 
 //------------------------------------------------------------------------------
-void ReceiveOverlap::handleIOCompletion(const size_t nbBytes)
+void ReceiveCompleter::handleIOCompletion(Overlap& holder, const size_t nbBytes)
 {
-    mFlags = 0;
-    if(WSAGetOverlappedResult(mSocket->socket(), this, &mBytes, FALSE, &mFlags))
+    if(holder.getOverlappedResult())
     {
-        ResetEvent(hEvent);
         //receive when connected, no bytes means disconnect
-        if(mBytes == 0)
+        if(holder.bytes() == 0)
         {
             disconnect();
         }
         else
         {
             //handle read
-            transferBufferToStream(mBytes);
-            mEventHandler->createResponse(transferStream(), *(new ResponseOverlap(mSocket, mEventHandler)));
-            prepareToReceive();
+            prepareToRespond(holder);
+            prepareToReceive(holder);
         }
     }
     else
@@ -61,9 +59,17 @@ void ReceiveOverlap::handleIOCompletion(const size_t nbBytes)
 }
 
 //------------------------------------------------------------------------------
-void ReceiveOverlap::prepareToReceive()
+void ReceiveCompleter::prepareToRespond(Overlap& holder)
 {
-    mFlags = 0;
+    auto completer = std::make_shared<ResponseCompleter>(mSocket, mEventHandler);
+    auto overlap = new Overlap(completer, mEventHandler->responseBufferSize());
+    holder.transferBufferToStream();
+    mEventHandler->createResponse(holder.transferStream(), overlap);
+}
+
+//------------------------------------------------------------------------------
+void ReceiveCompleter::prepareToReceive(Overlap& holder)
+{
     if(mSocket->isValid())
     {
         /**
@@ -71,17 +77,16 @@ void ReceiveOverlap::prepareToReceive()
          * a receive, there exists the possibility that there is data ready to be
          * received. We need to check for i/o pending if WSARecv returns SOCKET_ERROR.
          */
-        while(SOCKET_ERROR != WSARecv(mSocket->socket(), &mWsaBuffer, 1, &mBytes, &mFlags, this, 0))
+        while(SOCKET_ERROR != holder.queueReceive())
         {
             //if no bytes, connection is shutting down
-            if(0 == mBytes)
+            if(0 == holder.bytes())
             {
                 disconnect();
             }
             else
             {
-                transferBufferToStream(mBytes);
-                mEventHandler->createResponse(transferStream(), *(new ResponseOverlap(mSocket, mEventHandler)));
+                prepareToRespond(holder);
             }
         }
 
@@ -96,10 +101,10 @@ void ReceiveOverlap::prepareToReceive()
 }
 
 //------------------------------------------------------------------------------
-void ReceiveOverlap::disconnect()
+void ReceiveCompleter::disconnect()
 {
     mOnDisconnect();
-    mEventHandler->markForDeletion(*this);
+    mReadyForDeletion = true;
 }
 
 }

@@ -6,7 +6,8 @@ file(GLOB SOURCES "*.cpp")
 include(UseGtest)
 UseGtest(${TARGET} DEPENDENCIES ${SOURCES})
 
-SET (DEPENDENCIES ${DEPENDENCIES} WindowsClient)
+include_directories(${async.cpp_INCLUDE_DIRS})
+SET (DEPENDENCIES ${DEPENDENCIES} WindowsClient ${async.cpp_LIBRARIES})
 
 add_executable (${TARGET} ${HEADERS} ${SOURCES}) 
 target_link_libraries (${TARGET} ${DEPENDENCIES})

@@ -24,7 +24,7 @@ public:
         const size_t recvBufferSize,
         std::promise<async_cpp::async::AsyncResult>& promise,
         std::shared_ptr<IEventHandler> handler);
-    ~ReceiveOverlap();
+    virtual ~ReceiveOverlap();
 
     virtual void handleIOCompletion(const size_t nbBytes);
 

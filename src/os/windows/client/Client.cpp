@@ -29,9 +29,9 @@ public:
         overlap->prepareToReceive();
     }
 
-    virtual async_cpp::async::AsyncResult processStream(std::shared_ptr<utilities::ByteStream> stream)
+    virtual async_cpp::async::AsyncFuture processStream(std::shared_ptr<utilities::ByteStream> stream)
     {
-        return mClient.processStreamFunction()(stream);
+        return mClient.process(stream);
     }
 
     Client& mClient;
@@ -40,9 +40,8 @@ public:
 //------------------------------------------------------------------------------
 Client::Client(const quicktcp::client::ServerInfo& info, 
         std::shared_ptr<utilities::ByteStream> authentication, 
-        const size_t bufferSize,
-        std::function<async_cpp::async::AsyncResult(std::shared_ptr<utilities::ByteStream>)> processStreamFunc) 
-    : quicktcp::client::IClient(info, authentication, bufferSize, processStreamFunc), mIsRunning(false)
+        const size_t bufferSize) 
+    : quicktcp::client::IClient(info, authentication, bufferSize), mIsRunning(false)
 {
    //startup winsock
     WSAData wsaData;

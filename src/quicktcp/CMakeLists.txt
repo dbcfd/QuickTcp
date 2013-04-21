@@ -10,15 +10,16 @@ else()
 	SET (DEPENDENCIES WindowsServer WindowsClient)
 endif()
 
-set(async.cpp_VERSION 0.5.0)
-find_package(async.cpp REQUIRED)
-SET (DEPENDENCIES ${DEPENDENCIES} Utilities ${ASYNC.CPP_LIBRARIES})
+include_directories(${async.cpp_INCLUDE_DIRS})
+SET (DEPENDENCIES ${DEPENDENCIES} Utilities ${async.cpp_LIBRARIES})
 
-add_library (${TARGET} ${LIBRARY_BUILD_TYPE} ${HEADERS} ${SOURCES}) 
+add_library (${TARGET} ${HEADERS} ${SOURCES}) 
 target_link_libraries (${TARGET} ${DEPENDENCIES})
 
 set_target_properties (${TARGET} PROPERTIES
-    SOVERSION ${PROJECT_SO_VERSION})
+    SOVERSION ${PROJECT_SO_VERSION}
+	DEBUG_OUTPUT_NAME ${TARGET}${DEBUG_LIB_CONVENTION}
+	OUTPUT_NAME ${TARGET}${LIB_CONVENTION})
 
 if(NOT MSVC)
 	install (TARGETS ${TARGET} 

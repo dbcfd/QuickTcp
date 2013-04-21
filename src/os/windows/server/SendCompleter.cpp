@@ -1,5 +1,5 @@
-#include "os/windows/server/SendOverlap.h"
-#include "os/windows/server/IEventHandler.h"
+#include "os/windows/server/SendCompleter.h"
+#include "os/windows/server/Overlap.h"
 #include "os/windows/server/Socket.h"
 
 #include "utilities/ByteStream.h"
@@ -10,28 +10,27 @@ namespace windows {
 namespace server {
 
 //------------------------------------------------------------------------------
-SendOverlap::SendOverlap(std::shared_ptr<Socket> sckt, 
+SendCompleter::SendCompleter(std::shared_ptr<Socket> sckt, 
         std::shared_ptr<IEventHandler> evHandler,
-        std::shared_ptr<utilities::ByteStream> stream) : IOverlap(sckt, evHandler, stream), mExpectedSize(stream->size())
+        const size_t expectedSize) : ICompleter(sckt, evHandler), mExpectedSize(expectedSize)
 {
 
 }
 
 //------------------------------------------------------------------------------
-SendOverlap::~SendOverlap()
+SendCompleter::~SendCompleter()
 {
 
 }
 
 //------------------------------------------------------------------------------
-void SendOverlap::handleIOCompletion(const size_t nbBytes)
+void SendCompleter::handleIOCompletion(Overlap& holder, const size_t nbBytes)
 {
-    mFlags = 0;
-    DWORD bytesSent = 0;
-    if(WSAGetOverlappedResult(mSocket->socket(), this, &bytesSent, FALSE, &mFlags))
+    mTotalBytes = 0;
+    if(holder.getOverlappedResult())
     {
-        mBytes += bytesSent;
-        completeSend();
+        mTotalBytes += holder.bytes();
+        completeSend(holder);
     }
     else
     {
@@ -39,23 +38,23 @@ void SendOverlap::handleIOCompletion(const size_t nbBytes)
         int err = WSAGetLastError();
         if(WSA_IO_INCOMPLETE == err)
         {
-            mBytes += bytesSent;
+            mTotalBytes += holder.bytes();
         }
         else
         {
-            completeSend();
+            completeSend(holder);
         }
     }    
 }
 
 //------------------------------------------------------------------------------
-void SendOverlap::completeSend()
+void SendCompleter::completeSend(Overlap& holder)
 {
-    if(mExpectedSize != mBytes)
+    if(mExpectedSize != mTotalBytes)
     {
-        mEventHandler->reportError("Failed to send all bytes");
+        holder.reportError("Failed to send all bytes");
     }
-    mEventHandler->markForDeletion(*this);
+    mReadyForDeletion = true;
 }
 
 }

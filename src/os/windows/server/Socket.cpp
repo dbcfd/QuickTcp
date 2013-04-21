@@ -1,5 +1,5 @@
 #include "os/windows/server/Socket.h"
-#include "os/windows/server/IOverlap.h"
+#include "os/windows/server/Overlap.h"
 #include "os/windows/server/IEventHandler.h"
 
 namespace quicktcp {
@@ -43,8 +43,9 @@ Socket::~Socket()
 }
 
 //------------------------------------------------------------------------------
-void Socket::disconnect(IOverlap* overlap)
+bool Socket::disconnect(Overlap* overlap)
 {
+    bool ret = false;
     LPFN_DISCONNECTEX pfn;
     GUID guid = WSAID_DISCONNECTEX;
     DWORD bytes = 0;
@@ -63,9 +64,12 @@ void Socket::disconnect(IOverlap* overlap)
         if(WSA_IO_PENDING != lasterror)
         {
             close();
-            overlap->mEventHandler->reportError("DisconnectEx Error()");
+            overlap->reportError("DisconnectEx Error()");
+            ret = true;
         }
     }
+
+    return ret;
 }
 
 }
