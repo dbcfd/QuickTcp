@@ -10,6 +10,10 @@ else()
 	SET (DEPENDENCIES WindowsServer WindowsClient)
 endif()
 
+set(async.cpp_VERSION 0.5.0)
+find_package(async.cpp REQUIRED)
+SET (DEPENDENCIES ${DEPENDENCIES} Utilities ${ASYNC.CPP_LIBRARIES})
+
 add_library (${TARGET} ${LIBRARY_BUILD_TYPE} ${HEADERS} ${SOURCES}) 
 target_link_libraries (${TARGET} ${DEPENDENCIES})
 

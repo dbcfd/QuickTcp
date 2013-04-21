@@ -189,20 +189,12 @@ void Client::disconnect()
     mIsRunning = false;
     if(mThread.joinable())
     {
-        /**
-            * Close out our socket to sending and receiving. This doesn't actually send
-            * or receive disconnection signals.
-            */
-        WSASendDisconnect(mSocket->socket(), 0);
-        WSARecvDisconnect(mSocket->socket(), 0);
+        CloseHandle(mIOCP);
 
         mSocket->close();
 
-        PostQueuedCompletionStatus(mIOCP, 0, 0, 0);
-
         mThread.join();
 
-        CloseHandle(mIOCP);
     }
 }
 

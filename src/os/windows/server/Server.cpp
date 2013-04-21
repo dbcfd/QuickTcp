@@ -248,7 +248,7 @@ void Server::shutdown()
     if(wasRunning)
     {
         CloseHandle(mIOCP);
-        for(auto overlap : mOverlaps)
+        for(auto& overlap : mOverlaps)
         {
             overlap->waitForDisconnect();
             overlap->mSocket->close();
