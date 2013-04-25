@@ -113,7 +113,7 @@ void ConnectOverlap::shutdown()
     }
     else
     {
-        disconnect();
+        closeEvent();
     }
     mShuttingDown = true;
 }
@@ -131,26 +131,24 @@ void ConnectOverlap::disconnect()
 //------------------------------------------------------------------------------
 void ConnectOverlap::handleConnection()
 {
-    static auto finishFunc = [this]()->void {
-        mReceiver.reset();
-        if(mShuttingDown) 
+    static auto finishFunc = [](ConnectOverlap* overlap)->void {
+        overlap->mReceiver.reset();
+        if(overlap->mShuttingDown) 
         {
-            mEventHandler->postCompletion(this);
+            overlap->mEventHandler->postCompletion(overlap);
         }
         else
         {
-            disconnect();
+            overlap->disconnect();
         }
     };
 
     if(mEventHandler->authenticateConnection(transferStream()))
-    {
+    { 
         BOOL opt = TRUE;
         setsockopt(mSocket->socket(), SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(BOOL));
 
-        mReceiver = std::make_shared<ReceiveOverlap>(mEventHandler, mSocket, finishFunc);
-
-        mEventHandler->authenticateConnection(transferStream());
+        mReceiver = std::make_shared<ReceiveOverlap>(mEventHandler, mSocket, std::bind(finishFunc, this));
     }
     else
     {

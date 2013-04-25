@@ -210,11 +210,12 @@ void Server::shutdown()
     bool wasRunning = mRunning.exchange(false);
     if(wasRunning)
     {
-        closesocket(mSocket);
         for(auto overlap : mConnections)
         {
             overlap->shutdown();
         }
+        closesocket(mSocket);
+        PostQueuedCompletionStatus(mIOCP, 0, 0, 0);
         //if wait for events was never called, we need to clean up overlaps
         if(!waitingForEvents)
         {

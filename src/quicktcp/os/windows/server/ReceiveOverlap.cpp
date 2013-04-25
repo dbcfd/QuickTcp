@@ -78,7 +78,7 @@ void ReceiveOverlap::handleIOCompletion( const size_t nbBytes)
 //------------------------------------------------------------------------------
 void ReceiveOverlap::prepareToRespond()
 {
-    static auto finishFunc = [this](std::shared_ptr<ResponseOverlap> overlap)->void {
+    auto finishFunc = [this](std::shared_ptr<ResponseOverlap> overlap)->void {
         std::unique_lock<std::mutex> lock(mResponseMutex);
         mOutstandingResponses.erase(overlap);
         if(mState == State::ClosingResponses) mEventHandler->postCompletion(this);
