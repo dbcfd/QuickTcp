@@ -7,6 +7,8 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <mutex>
+#include <set>
 #include <vector>
 
 namespace async_cpp {
@@ -25,8 +27,9 @@ namespace windows {
 namespace server {
 
 class IEventHandler;
+struct ConnectOverlap;
+struct SendOverlap;
 class Socket;
-struct Overlap;
 
 /**
  * Implementation of a server using Winsock2 calls. Will listen for connections on a port, accept those connections
@@ -49,12 +52,8 @@ public:
 
     void send(std::shared_ptr<Socket> sckt, std::shared_ptr<utilities::ByteStream> stream); 
 
-    /**
-     * Create the asynchronous socket and functionality necessary for AcceptEx
-     */
-    void prepareForClientConnection(Overlap& overlap);
-
-    inline HANDLE getIOCompletionPort() const;
+    inline HANDLE ioCompletionPort() const;
+    inline SOCKET socket() const;
 
 private:
     /**
@@ -72,14 +71,22 @@ private:
     SOCKET mSocket; //this is the socket we listen for connections on
     HANDLE mIOCP;
     std::condition_variable mShutdownSignal;
-    std::vector<std::shared_ptr<Socket>> mConnectionSockets;
+    std::vector<std::shared_ptr<ConnectOverlap>> mConnections;
+    std::mutex mSendMutex;
+    std::set<SendOverlap*> mOutstandingSends;
 };
 
 //inline implementations
 //------------------------------------------------------------------------------
-HANDLE Server::getIOCompletionPort() const
+HANDLE Server::ioCompletionPort() const
 {
     return mIOCP;
+}
+
+//------------------------------------------------------------------------------
+SOCKET Server::socket() const
+{
+    return mSocket;
 }
 
 }

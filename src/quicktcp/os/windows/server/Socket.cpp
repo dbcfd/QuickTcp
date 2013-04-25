@@ -1,5 +1,5 @@
 #include "quicktcp/os/windows/server/Socket.h"
-#include "quicktcp/os/windows/server/Overlap.h"
+#include "quicktcp/os/windows/server/IOverlap.h"
 #include "quicktcp/os/windows/server/IEventHandler.h"
 
 namespace quicktcp {
@@ -43,7 +43,7 @@ Socket::~Socket()
 }
 
 //------------------------------------------------------------------------------
-bool Socket::disconnect(Overlap* overlap)
+bool Socket::disconnect(IOverlap* overlap)
 {
     bool ret = false;
     if(isValid())
@@ -66,7 +66,6 @@ bool Socket::disconnect(Overlap* overlap)
             if(WSA_IO_PENDING != lasterror)
             {
                 close();
-                overlap->reportError("DisconnectEx Error()");
                 ret = true;
             }
         }

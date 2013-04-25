@@ -1,10 +1,10 @@
 #include "quicktcp/os/windows/server/Server.h"
-#include "quicktcp/os/windows/server/Overlap.h"
+#include "quicktcp/os/windows/server/IOverlap.h"
 #include "quicktcp/os/windows/server/IEventHandler.h"
-#include "quicktcp/os/windows/server/ConnectCompleter.h"
-#include "quicktcp/os/windows/server/ReceiveCompleter.h"
-#include "quicktcp/os/windows/server/ResponseCompleter.h"
-#include "quicktcp/os/windows/server/SendCompleter.h"
+#include "quicktcp/os/windows/server/ConnectOverlap.h"
+#include "quicktcp/os/windows/server/ReceiveOverlap.h"
+#include "quicktcp/os/windows/server/ResponseOverlap.h"
+#include "quicktcp/os/windows/server/SendOverlap.h"
 #include "quicktcp/os/windows/server/Socket.h"
 
 #include "async/AsyncResult.h"
@@ -41,70 +41,36 @@ public:
 
     }
 
-    virtual void authenticateConnection(std::shared_ptr<utilities::ByteStream> stream, Overlap* overlap) final
+    virtual bool authenticateConnection(std::shared_ptr<utilities::ByteStream> stream) final
     {
-        manager->run(std::make_shared<async_cpp::workers::BasicTask>(
-            [this, stream, overlap]()->void {
-                auto completer = std::static_pointer_cast<ReceiveCompleter>(overlap->completer());
-                try {
-                    if(responder->authenticateConnection(stream))
-                    {
-                        completer->prepareToReceive(*overlap);
-                    }
-                    else
-                    {
-                        completer->disconnect();
-                    }
-                }
-                catch(std::exception& ex)
-                {
-                    reportError(ex.what());
-                    completer->disconnect();
-                }
-            }
-        ) );
+        return responder->authenticateConnection(stream);
     }
 
-    virtual void queueAccept(std::shared_ptr<ConnectCompleter> completer, const bool associateWithIOCP) final
+    virtual void queueAccept(ConnectOverlap* overlap) final
     {
-        if(completer->mSocket->isValid())
+        if(server.socket() != INVALID_SOCKET)   
         {
-            auto overlap = new Overlap(completer, connectBufferSize());
-            completer->setOverlap(overlap);
-            auto doneWithIOCP = !associateWithIOCP;
-            if(associateWithIOCP)
-            {
-                if(server.getIOCompletionPort() != CreateIoCompletionPort((HANDLE)overlap->winsocket(), server.getIOCompletionPort(), (ULONG_PTR)overlap, 0))
-                {
-                    auto error = std::string("CreateIoCompletionPort Error: ") + std::to_string(WSAGetLastError());
-                    reportError(error);
-                }
-                else
-                {
-                    doneWithIOCP = true;
-                }
-            }
-            if(doneWithIOCP)
-            {
-                server.prepareForClientConnection(*overlap);
-            }
+            overlap->prepareForClientConnection(server.socket());
         }
     }
 
-    virtual void createResponse(std::shared_ptr<utilities::ByteStream> stream, Overlap* overlap)
+    virtual void postCompletion(IOverlap* overlap) final
+    {
+        PostQueuedCompletionStatus(server.ioCompletionPort(), 0, (ULONG_PTR)overlap, overlap);
+    }
+
+    virtual void createResponse(std::shared_ptr<utilities::ByteStream> stream, std::shared_ptr<ResponseOverlap> overlap)
     {
         manager->run(std::make_shared<async_cpp::workers::BasicTask>(
             [this, stream, overlap]()->void {
-                auto completer = std::static_pointer_cast<ResponseCompleter>(overlap->completer());
                 try {
-                    completer->setResult(std::move(responder->respond(stream)));
+                    overlap->setResult(std::move(responder->respond(stream)));
                 }
                 catch(std::exception& ex)
                 {
                     //failure
-                    completer->setResult(std::move(async_cpp::async::AsyncResult(ex.what())));
+                    overlap->setResult(std::move(async_cpp::async::AsyncResult(ex.what())));
                 }
-                PostQueuedCompletionStatus(server.getIOCompletionPort(), 0, 0, overlap);
             }
         ) );
     }
@@ -164,12 +130,18 @@ Server::Server(const quicktcp::server::ServerInfo& info,
 
     createServerSocket();
 
-    mConnectionSockets.reserve(info.maxConnections());
+    mConnections.reserve(info.maxConnections());
     for(size_t i = 0; i < info.maxConnections(); ++i)
     {
-        mConnectionSockets.emplace_back(std::make_shared<Socket>());
-        auto completer = std::make_shared<ConnectCompleter>(mConnectionSockets.back(), mEventHandler);
-        mEventHandler->queueAccept(completer, true);
+        auto socket = std::make_shared<Socket>();
+        auto overlap = std::make_shared<ConnectOverlap>(mEventHandler, socket);
+        if(mIOCP != CreateIoCompletionPort((HANDLE)socket->socket(), mIOCP, (ULONG_PTR)overlap.get(), 0))
+        {
+            auto error = std::string("CreateIoCompletionPort Error: ") + std::to_string(WSAGetLastError());
+            mEventHandler->reportError(error);
+        }
+        overlap->prepareForClientConnection(mSocket);
+        mConnections.emplace_back(overlap);
     }
 }
 
@@ -238,9 +210,10 @@ void Server::shutdown()
     bool wasRunning = mRunning.exchange(false);
     if(wasRunning)
     {
-        for(auto sock : mConnectionSockets)
+        closesocket(mSocket);
+        for(auto overlap : mConnections)
         {
-            sock->close();
+            overlap->shutdown();
         }
         //if wait for events was never called, we need to clean up overlaps
         if(!waitingForEvents)
@@ -255,7 +228,6 @@ void Server::shutdown()
         }
         mManager->waitForTasksToComplete();
         //finish clean up
-        closesocket(mSocket);
         CloseHandle(mIOCP);
         WSACleanup();
         mShutdownSignal.notify_all();
@@ -280,12 +252,8 @@ void Server::waitForEvents()
             {
                 if(nullptr != overlaps[idx].lpOverlapped)
                 {
-                    auto overlap = static_cast<Overlap*>(overlaps[idx].lpOverlapped);
+                    auto overlap = static_cast<IOverlap*>(overlaps[idx].lpOverlapped);
                     overlap->handleIOCompletion(overlaps[idx].dwNumberOfBytesTransferred);
-                    if(overlap->readyForDeletion())
-                    {
-                        delete overlap;
-                    }
                 }
             }
         }
@@ -321,15 +289,8 @@ void Server::cleanupOverlaps()
             {
                 if(nullptr != overlaps[idx].lpOverlapped)
                 {
-                    auto overlap = static_cast<Overlap*>(overlaps[idx].lpOverlapped);
-                    if(overlap->readyForDeletion())
-                    {
-                        delete overlap;
-                    }
-                    else
-                    {
-                        overlap->shutdown();
-                    }
+                    auto overlap = static_cast<IOverlap*>(overlaps[idx].lpOverlapped);
+                    overlap->shutdown();
                 }
             }
         }
@@ -341,50 +302,11 @@ void Server::cleanupOverlaps()
 }
 
 //------------------------------------------------------------------------------
-void Server::prepareForClientConnection(Overlap& overlap)
-{
-    if(mSocket != INVALID_SOCKET && overlap.socket()->isValid())
-    {
-        LPFN_ACCEPTEX pfnAcceptEx;
-        GUID acceptex_guid = WSAID_ACCEPTEX;
-        DWORD bytes = 0;
-
-        size_t addrSize = 2*sizeof(SOCKADDR_STORAGE) + 32;
-
-        //use i/o control to set up the socket for accept ex
-        if(SOCKET_ERROR
-                == WSAIoctl(mSocket, SIO_GET_EXTENSION_FUNCTION_POINTER,
-                        &acceptex_guid, sizeof(acceptex_guid), &pfnAcceptEx, sizeof(pfnAcceptEx),
-                        &bytes, &overlap, 0))
-        {
-            int lasterror = WSAGetLastError();
-            mEventHandler->reportError("Failed to obtain AcceptEx() pointer");
-        }
-
-        if(!overlap.queueAcceptEx(pfnAcceptEx, mSocket))
-        {
-            int lasterror = WSAGetLastError();
-
-            if(WSA_IO_PENDING != lasterror)
-            {
-                overlap.socket()->close();            
-                mEventHandler->reportError("AcceptEx Error()");
-            }
-        }
-        else
-        {
-            overlap.handleIOCompletion(bytes);
-        }
-    }
-}
-
-//------------------------------------------------------------------------------
 void Server::send(std::shared_ptr<Socket> sckt, std::shared_ptr<utilities::ByteStream> stream)
 {
     if(sckt->isValid())
     {
-        auto completer = std::make_shared<SendCompleter>(sckt, mEventHandler, stream->size());
-        auto overlap = new Overlap(completer, stream);
+        auto overlap = std::make_shared<SendOverlap>(mEventHandler, sckt, stream);
 
         //if socket error, need to see if it was just pending
         //completed sends will be reported via i/o completion

@@ -8,7 +8,7 @@ namespace os {
 namespace windows {
 namespace server {
 
-struct Overlap;
+struct IOverlap;
 /**
  * Wrapper around the underlying Winsock2 socket implementation, which maintains
  * a network connection to some other device.
@@ -27,7 +27,7 @@ public:
 
     ~Socket();
 
-    bool disconnect(Overlap* overlap);
+    bool disconnect(IOverlap* overlap);
 
     inline void close();
     inline SOCKET socket() const;
