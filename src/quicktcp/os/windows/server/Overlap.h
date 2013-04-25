@@ -46,7 +46,7 @@ private:
     WSABUF mWsaBuffer;
     DWORD mFlags;
     DWORD mBytes;
-    std::vector<char> mBuffer;
+    char *mBuffer;
     std::shared_ptr<utilities::ByteStream> mStream;
     std::shared_ptr<ICompleter> mCompleter;
 };

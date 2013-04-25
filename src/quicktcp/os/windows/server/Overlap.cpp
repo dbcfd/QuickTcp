@@ -14,14 +14,16 @@ namespace server {
 
 //------------------------------------------------------------------------------
 Overlap::Overlap(std::shared_ptr<ICompleter> completer, const size_t bufferSize) 
-    : mCompleter(completer), mBytes(0), mFlags(0), mBuffer(bufferSize, 0)
+    : mCompleter(completer), mBytes(0), mFlags(0)
 {
     if (WSA_INVALID_EVENT == (hEvent = WSACreateEvent()))
     {
         throw(std::runtime_error("WSACreateEvent"));
     }
     SecureZeroMemory(&mWsaBuffer, sizeof(WSABUF));
-    mWsaBuffer.buf = &mBuffer[0];
+    mBuffer = new char[bufferSize];
+    memset(mBuffer, 0, sizeof(char) * bufferSize);
+    mWsaBuffer.buf = mBuffer;
     mWsaBuffer.len = (ULONG)bufferSize;
 }
 
@@ -34,9 +36,9 @@ Overlap::Overlap(std::shared_ptr<ICompleter> completer, std::shared_ptr<utilitie
         throw(std::runtime_error("WSACreateEvent"));
     }
     SecureZeroMemory(&mWsaBuffer, sizeof(WSABUF));
-    mBuffer.resize(stream->size());
-    mBuffer.assign((const char*)stream->buffer(), (const char*)stream->buffer() + stream->size());
-    mWsaBuffer.buf = &mBuffer[0];
+    mBuffer = new char[stream->size()];
+    memcpy(mBuffer, stream->buffer(), stream->size());
+    mWsaBuffer.buf = mBuffer;
     mWsaBuffer.len = (ULONG)stream->size();
 }
 
@@ -48,6 +50,7 @@ Overlap::~Overlap()
         WSACloseEvent(hEvent);
     }
     hEvent = WSA_INVALID_EVENT;
+    delete[] mBuffer;
 }
 
 //------------------------------------------------------------------------------
@@ -104,7 +107,7 @@ void Overlap::shutdown()
 bool Overlap::readyForDeletion()
 {
     bool ret = (nullptr == mCompleter);
-    if(mCompleter->readyForDeletion())
+    if(!ret && mCompleter->readyForDeletion())
     {
         shutdown();
     }

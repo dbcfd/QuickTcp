@@ -32,11 +32,15 @@ public:
     void reset(Overlap* holder);
     void handleConnection(Overlap& holder);
     void waitForDisconnect(Overlap& holder);
+    void shutdown();
+
+    inline void setOverlap(Overlap* overlap);
 
 private:
     std::shared_ptr<ReceiveCompleter> mReceiver;
     bool mPendingDisconnect;
     bool mReadyForDeletion;
+    Overlap* mOverlap;
 };
 
 //Inline Implementations
@@ -44,6 +48,12 @@ private:
 bool ConnectCompleter::readyForDeletion() const
 {
     return mReadyForDeletion;
+}
+
+//------------------------------------------------------------------------------
+void ConnectCompleter::setOverlap(Overlap* overlap)
+{
+    mOverlap = overlap;
 }
 
 }

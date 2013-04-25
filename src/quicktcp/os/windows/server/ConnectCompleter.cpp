@@ -15,7 +15,7 @@ namespace server {
 //------------------------------------------------------------------------------
 ConnectCompleter::ConnectCompleter(std::shared_ptr<Socket> sckt,
                                std::shared_ptr<IEventHandler> evHandler) 
-    : ICompleter(sckt, evHandler), mPendingDisconnect(false), mReadyForDeletion(false)
+    : ICompleter(sckt, evHandler), mPendingDisconnect(false), mReadyForDeletion(false), mOverlap(nullptr)
 {
     
 }
@@ -23,7 +23,7 @@ ConnectCompleter::ConnectCompleter(std::shared_ptr<Socket> sckt,
 //------------------------------------------------------------------------------
 ConnectCompleter::~ConnectCompleter()
 {
-    
+    mOverlap = nullptr;   
 }
 
 //------------------------------------------------------------------------------
@@ -34,7 +34,7 @@ void ConnectCompleter::handleIOCompletion(Overlap& holder, const size_t nbBytes)
         if(mPendingDisconnect)
         {
             mPendingDisconnect = false;
-            mEventHandler->queueAccept(std::static_pointer_cast<ConnectCompleter>(holder.completer()));
+            mEventHandler->queueAccept(std::static_pointer_cast<ConnectCompleter>(holder.completer()), false);
         }
         else
         {
@@ -52,6 +52,7 @@ void ConnectCompleter::handleIOCompletion(Overlap& holder, const size_t nbBytes)
         if(WSA_IO_INCOMPLETE != err)
         {
             mEventHandler->reportError(std::string("Incomplete I/O Error when waiting for connection") + std::to_string(err));
+            mReadyForDeletion = true;
         }
         else
         {
@@ -81,6 +82,7 @@ void ConnectCompleter::handleConnection(Overlap& holder)
     auto completer = holder.completer();
     auto resetFunc = [this, completer]()->void {
         auto nextHolder = new Overlap(completer, mEventHandler->connectBufferSize());
+        mOverlap = nextHolder;
         reset(nextHolder);
     };
 
@@ -97,6 +99,12 @@ void ConnectCompleter::waitForDisconnect(Overlap& holder)
     {
         holder.getOverlappedResult();
     }
+}
+
+//------------------------------------------------------------------------------
+void ConnectCompleter::shutdown()
+{
+    if(mOverlap) mOverlap->shutdown();
 }
 
 }

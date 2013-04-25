@@ -27,6 +27,7 @@ namespace windows {
 namespace server {
 
 //TODO: These should be configurable
+static const size_t NB_SIMULTANEOUS_OVERLAPS(10);
 static const size_t CONNECT_BUFFER_SIZE(200);
 static const size_t RECEIVE_BUFFER_SIZE(2048);
 static const size_t RESPONSE_BUFFER_SIZE(200);
@@ -64,15 +65,30 @@ public:
         ) );
     }
 
-    virtual void queueAccept(std::shared_ptr<ConnectCompleter> completer) final
+    virtual void queueAccept(std::shared_ptr<ConnectCompleter> completer, const bool associateWithIOCP) final
     {
-        auto overlap = new Overlap(completer, connectBufferSize());
-        if(server.getIOCompletionPort() != CreateIoCompletionPort((HANDLE)overlap->winsocket(), server.getIOCompletionPort(), (ULONG_PTR)overlap, 0))
+        if(completer->mSocket->isValid())
         {
-            auto error = std::string("CreateIoCompletionPort Error: ") + std::to_string(WSAGetLastError());
-            throw(std::runtime_error(error));
+            auto overlap = new Overlap(completer, connectBufferSize());
+            completer->setOverlap(overlap);
+            auto doneWithIOCP = !associateWithIOCP;
+            if(associateWithIOCP)
+            {
+                if(server.getIOCompletionPort() != CreateIoCompletionPort((HANDLE)overlap->winsocket(), server.getIOCompletionPort(), (ULONG_PTR)overlap, 0))
+                {
+                    auto error = std::string("CreateIoCompletionPort Error: ") + std::to_string(WSAGetLastError());
+                    reportError(error);
+                }
+                else
+                {
+                    doneWithIOCP = true;
+                }
+            }
+            if(doneWithIOCP)
+            {
+                server.prepareForClientConnection(*overlap);
+            }
         }
-        server.prepareForClientConnection(*overlap);
     }
 
     virtual void createResponse(std::shared_ptr<utilities::ByteStream> stream, Overlap* overlap)
@@ -148,11 +164,12 @@ Server::Server(const quicktcp::server::ServerInfo& info,
 
     createServerSocket();
 
+    mConnectionSockets.reserve(info.maxConnections());
     for(size_t i = 0; i < info.maxConnections(); ++i)
     {
         mConnectionSockets.emplace_back(std::make_shared<Socket>());
         auto completer = std::make_shared<ConnectCompleter>(mConnectionSockets.back(), mEventHandler);
-        mEventHandler->queueAccept(completer);
+        mEventHandler->queueAccept(completer, true);
     }
 }
 
@@ -221,9 +238,9 @@ void Server::shutdown()
     bool wasRunning = mRunning.exchange(false);
     if(wasRunning)
     {
-        for(auto sckt : mConnectionSockets)
+        for(auto sock : mConnectionSockets)
         {
-            sckt->close();
+            sock->close();
         }
         //if wait for events was never called, we need to clean up overlaps
         if(!waitingForEvents)
@@ -254,9 +271,10 @@ void Server::waitForEvents()
     }
     while(mRunning)
     {
-        OVERLAPPED_ENTRY overlaps[10];
+        OVERLAPPED_ENTRY overlaps[NB_SIMULTANEOUS_OVERLAPS];
+        SecureZeroMemory(overlaps, NB_SIMULTANEOUS_OVERLAPS*sizeof(OVERLAPPED_ENTRY));
         ULONG overlapsReturned = 0;
-        if(GetQueuedCompletionStatusEx(mIOCP, overlaps, sizeof(overlaps), &overlapsReturned, WSA_INFINITE, FALSE))
+        if(GetQueuedCompletionStatusEx(mIOCP, overlaps, NB_SIMULTANEOUS_OVERLAPS, &overlapsReturned, WSA_INFINITE, FALSE))
         {
             for(auto idx = ULONG(0); idx < overlapsReturned; ++idx)
             {
@@ -271,6 +289,12 @@ void Server::waitForEvents()
                 }
             }
         }
+        else
+        {
+            int lasterror = GetLastError();
+            mEventHandler->reportError("Error getting completion status");
+        }
+
     }   
 
     cleanupOverlaps();
@@ -285,24 +309,33 @@ void Server::waitForEvents()
 //------------------------------------------------------------------------------
 void Server::cleanupOverlaps()
 {
-    OVERLAPPED_ENTRY overlaps[10];
+    OVERLAPPED_ENTRY overlaps[NB_SIMULTANEOUS_OVERLAPS];
+    SecureZeroMemory(overlaps, NB_SIMULTANEOUS_OVERLAPS*sizeof(OVERLAPPED_ENTRY));
     ULONG overlapsReturned = 0;
-    while(GetQueuedCompletionStatusEx(mIOCP, overlaps, sizeof(overlaps), &overlapsReturned, WSA_INFINITE, FALSE))
+    bool hasOverlapsOutstanding = true;
+    while(hasOverlapsOutstanding)
     {
-        for(auto idx = ULONG(0); idx < overlapsReturned; ++idx)
+        if(GetQueuedCompletionStatusEx(mIOCP, overlaps, NB_SIMULTANEOUS_OVERLAPS, &overlapsReturned, 10, FALSE))
         {
-            if(nullptr != overlaps[idx].lpOverlapped)
+            for(auto idx = ULONG(0); idx < overlapsReturned; ++idx)
             {
-                auto overlap = static_cast<Overlap*>(overlaps[idx].lpOverlapped);
-                if(overlap->readyForDeletion())
+                if(nullptr != overlaps[idx].lpOverlapped)
                 {
-                    delete overlap;
-                }
-                else
-                {
-                    overlap->shutdown();
+                    auto overlap = static_cast<Overlap*>(overlaps[idx].lpOverlapped);
+                    if(overlap->readyForDeletion())
+                    {
+                        delete overlap;
+                    }
+                    else
+                    {
+                        overlap->shutdown();
+                    }
                 }
             }
+        }
+        else
+        {
+            hasOverlapsOutstanding = false;
         }
     }
 }

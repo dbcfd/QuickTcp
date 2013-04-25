@@ -25,8 +25,8 @@ namespace windows {
 namespace server {
 
 class IEventHandler;
-struct Overlap;
 class Socket;
+struct Overlap;
 
 /**
  * Implementation of a server using Winsock2 calls. Will listen for connections on a port, accept those connections

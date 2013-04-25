@@ -46,26 +46,29 @@ Socket::~Socket()
 bool Socket::disconnect(Overlap* overlap)
 {
     bool ret = false;
-    LPFN_DISCONNECTEX pfn;
-    GUID guid = WSAID_DISCONNECTEX;
-    DWORD bytes = 0;
-
-    //use i/o control to set up the socket for accept ex
-    if(SOCKET_ERROR == WSAIoctl(mSocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid), &pfn, sizeof(pfn), &bytes, overlap, nullptr))
+    if(isValid())
     {
-        throw(std::runtime_error("Failed to obtain DisconnectEx() pointer"));
-    }
+        LPFN_DISCONNECTEX pfn;
+        GUID guid = WSAID_DISCONNECTEX;
+        DWORD bytes = 0;
 
-    DWORD flags = TF_REUSE_SOCKET;
-    if(!pfn(mSocket, overlap, flags, 0))
-    {
-        int lasterror = WSAGetLastError();
-
-        if(WSA_IO_PENDING != lasterror)
+        //use i/o control to set up the socket for accept ex
+        if(SOCKET_ERROR == WSAIoctl(mSocket, SIO_GET_EXTENSION_FUNCTION_POINTER, &guid, sizeof(guid), &pfn, sizeof(pfn), &bytes, overlap, nullptr))
         {
-            close();
-            overlap->reportError("DisconnectEx Error()");
-            ret = true;
+            throw(std::runtime_error("Failed to obtain DisconnectEx() pointer"));
+        }
+
+        DWORD flags = TF_REUSE_SOCKET;
+        if(!pfn(mSocket, overlap, flags, 0))
+        {
+            int lasterror = WSAGetLastError();
+
+            if(WSA_IO_PENDING != lasterror)
+            {
+                close();
+                overlap->reportError("DisconnectEx Error()");
+                ret = true;
+            }
         }
     }
 
