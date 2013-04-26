@@ -8,9 +8,7 @@ include(SetBuildProperties)
 #project variables
 project(QuickTcp CXX C)
 
-set(version 0.5.0)
-
-set(PROJECT_SO_VERSION ${version})
+set(PROJECT_VERSION 0.5.0)
 
 option(BUILD_TESTS "Build tests" ON)
 option(USE_STATIC_RUNTIME "Use the static runtime (/MT)" OFF)
@@ -20,12 +18,7 @@ option(
   gtest_force_shared_crt
   "Use shared (DLL) run-time lib even when Google Test is built as static lib."
   OFF)
-  
-set(LIBRARY_BUILD_TYPE STATIC)
-if(BUILD_SHARED_LIBS)
-	set(LIBRARY_BUILD_TYPE SHARED)
-endif()
-  
+   
 if(NOT USE_STATIC_RUNTIME AND NOT BUILD_SHARED_LIBS)
 	set(gtest_force_shared_crt ON)
 endif()
@@ -50,5 +43,6 @@ if(BUILD_TESTS)
 	enable_testing()
 endif()
 #project source
+find_package(libuv 0.9.1 REQUIRED)
 find_package(async.cpp 0.7.0 REQUIRED)
 add_subdirectory(src)

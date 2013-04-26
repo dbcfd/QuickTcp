@@ -9,6 +9,9 @@ macro(_FIND_LIBRARY_FOR _proj _var)
 			${THIRDPARTY_LIB_DIR}/${_proj}/${${_proj}_VERSION}/lib
 		PATH_SUFFIXES lib
 	)
+	if(NOT ${_var})
+		message("--${_proj} : Failed to find ${ARGN} in ${${_proj}_ROOT}/${${_proj}_FIND_VERSION}/lib or ${THIRDPARTY_LIB_DIR}/${_proj}/${${_proj}_VERSION}/lib")
+	endif()
 	mark_as_advanced(${_var})
 endmacro()
 

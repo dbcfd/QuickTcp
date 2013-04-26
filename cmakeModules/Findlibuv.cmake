@@ -24,7 +24,7 @@ if(NOT libuv_FOUND)
     # Find the libraries
 
     _FIND_LIBRARY_FOR(${FindProject} LIBUV_LIBRARY libuv)
-	_FIND_LIBRARY_FOR(${FindProject} LIBUV_LIBRARY_DEBUG libuv)
+	_FIND_LIBRARY_FOR(${FindProject} LIBUV_LIBRARY_DEBUG libuvd)
 
     # Find the headers
     _FIND_HEADER_FOR(${FindProject} "libuv/uv.h" LIBUV_INCLUDE_DIR)
@@ -33,8 +33,7 @@ if(NOT libuv_FOUND)
     # all listed variables are TRUE
     include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 
-    FIND_PACKAGE_HANDLE_STANDARD_ARGS(${FindProject} DEFAULT_MSG
-        LIBUV_LIBRARY LIBUV_INCLUDE_DIR)
+    FIND_PACKAGE_HANDLE_STANDARD_ARGS(${FindProject} DEFAULT_MSG LIBUV_LIBRARY LIBUV_INCLUDE_DIR)
     _APPEND_LIBRARIES(libuv_LIBRARIES LIBUV_LIBRARY)
     set(libuv_LIBRARIES ${libuv_LIBRARIES} CACHE INTERNAL "Listing of libuv libraries")
 	set(libuv_INCLUDE_DIRS ${${FindProject}_INCLUDE_DIR} CACHE INTERNAL "libuv include directory")
