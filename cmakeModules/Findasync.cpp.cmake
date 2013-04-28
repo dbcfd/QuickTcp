@@ -20,27 +20,26 @@ if(async.cpp_VERSION)
 endif()
 
 if(NOT async.cpp_FOUND)
-    set(FindProject "async.cpp")
     # Find the libraries
 
-    _FIND_LIBRARY_FOR(${FindProject} ASYNC_LIBRARY Async${LIB_CONVENTION})
-    _FIND_LIBRARY_FOR(${FindProject} ASYNC_LIBRARY_DEBUG Async${DEBUG_LIB_CONVENTION})
-    _FIND_LIBRARY_FOR(${FindProject} WORKERS_LIBRARY Workers${LIB_CONVENTION})
-    _FIND_LIBRARY_FOR(${FindProject} WORKERS_LIBRARY_DEBUG Workers${DEBUG_LIB_CONVENTION})
+    _FIND_LIBRARY_FOR(async.cpp ASYNC_LIBRARY Async${LIB_CONVENTION})
+    _FIND_LIBRARY_FOR(async.cpp ASYNC_LIBRARY_DEBUG Async${DEBUG_LIB_CONVENTION})
+    _FIND_LIBRARY_FOR(async.cpp WORKERS_LIBRARY Workers${LIB_CONVENTION})
+    _FIND_LIBRARY_FOR(async.cpp WORKERS_LIBRARY_DEBUG Workers${DEBUG_LIB_CONVENTION})
 
     # Find the headers
-    _FIND_HEADER_FOR(${FindProject} "async/Async.h" ${FindProject}_INCLUDE_DIR)
+    _FIND_HEADER_FOR(async.cpp "async/Async.h" ASYNC_INCLUDE_DIR)
 
     # handle the QUIETLY and REQUIRED arguments and set SomeMarkitLibrary_FOUND to TRUE if 
     # all listed variables are TRUE
     include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 
-    FIND_PACKAGE_HANDLE_STANDARD_ARGS(${FindProject} DEFAULT_MSG
-        ASYNC_LIBRARY WORKERS_LIBRARY ${FindProject}_INCLUDE_DIR)
+    FIND_PACKAGE_HANDLE_STANDARD_ARGS(async.cpp DEFAULT_MSG
+        ASYNC_LIBRARY WORKERS_LIBRARY ASYNC_INCLUDE_DIR)
     _APPEND_LIBRARIES(async.cpp_LIBRARIES ASYNC_LIBRARY)
 	_APPEND_LIBRARIES(async.cpp_LIBRARIES WORKERS_LIBRARY)
     set(async.cpp_LIBRARIES ${async.cpp_LIBRARIES} CACHE INTERNAL "Listing of Async.cpp libraries")
-	set(async.cpp_INCLUDE_DIRS ${${FindProject}_INCLUDE_DIR} CACHE INTERNAL "Async.cpp include directory")
+	set(async.cpp_INCLUDE_DIRS ${ASYNC_INCLUDE_DIR} CACHE INTERNAL "Async.cpp include directory")
 	set(async.cpp_VERSION ${async.cpp_FIND_VERSION} CACHE INTERNAL "Version of async.cp found")
 	set(async.cpp_FOUND ${ASYNC.CPP_FOUND} CACHE INTERNAL "Whether or not async.cpp was found")
 endif()

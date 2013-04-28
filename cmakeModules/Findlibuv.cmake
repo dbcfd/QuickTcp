@@ -20,27 +20,27 @@ if(libuv_VERSION)
 endif()
 
 if(NOT libuv_FOUND)
-    set(FindProject "libuv")
     # Find the libraries
-
-    _FIND_LIBRARY_FOR(${FindProject} LIBUV_LIBRARY libuv)
-	_FIND_LIBRARY_FOR(${FindProject} LIBUV_LIBRARY_DEBUG libuvd)
+    _FIND_LIBRARY_FOR(libuv LIBUV_LIBRARY libuv)
+	_FIND_LIBRARY_FOR(libuv LIBUV_LIBRARY_DEBUG libuvd)
 
     # Find the headers
-    _FIND_HEADER_FOR(${FindProject} "libuv/uv.h" LIBUV_INCLUDE_DIR)
+    _FIND_HEADER_FOR(libuv "uv.h" LIBUV_INCLUDE_DIR)
 
     # handle the QUIETLY and REQUIRED arguments and set SomeMarkitLibrary_FOUND to TRUE if 
     # all listed variables are TRUE
     include(${CMAKE_CURRENT_LIST_DIR}/FindPackageHandleStandardArgs.cmake)
 
-    FIND_PACKAGE_HANDLE_STANDARD_ARGS(${FindProject} DEFAULT_MSG LIBUV_LIBRARY LIBUV_INCLUDE_DIR)
+    FIND_PACKAGE_HANDLE_STANDARD_ARGS(libuv DEFAULT_MSG LIBUV_LIBRARY LIBUV_INCLUDE_DIR)
     _APPEND_LIBRARIES(libuv_LIBRARIES LIBUV_LIBRARY)
+	_APPEND_LIBRARIES(libuv_LIBRARIES LIBUV_LIBRARY_DEBUG)
     set(libuv_LIBRARIES ${libuv_LIBRARIES} CACHE INTERNAL "Listing of libuv libraries")
-	set(libuv_INCLUDE_DIRS ${${FindProject}_INCLUDE_DIR} CACHE INTERNAL "libuv include directory")
+	set(libuv_INCLUDE_DIRS ${LIBUV_INCLUDE_DIR} CACHE INTERNAL "libuv include directory")
 	set(libuv_VERSION ${libuv_FIND_VERSION} CACHE INTERNAL "Version of libuv found")
-	set(libuv_FOUND ${libuv_FOUND} CACHE INTERNAL "Whether or not libuv was found")
+	set(libuv_FOUND ${LIBUV_FOUND} CACHE INTERNAL "Whether or not libuv was found")
 endif()
 
 if(libuv_FOUND)
+	set(libuv_ROOT ${libuv_ROOT})
 	include_directories(${libuv_INCLUDE_DIRS})
 endif()

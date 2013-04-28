@@ -25,10 +25,11 @@ macro(_APPEND_LIBRARIES _list _release)
 endmacro()
 
 macro(_FIND_HEADER_FOR _proj _file _include_dir)
-	find_path(proj_include_dir NAMES ${_file}
+	find_path(${_proj}_include_dir NAMES ${_file}
 		HINTS
 			${${_proj}_ROOT}/${${_proj}_FIND_VERSION}/include
 			${THIRDPARTY_LIB_DIR}/${_proj}/${${_proj}_VERSION}/include
 	)
-	set(${_include_dir} ${proj_include_dir})
+	set(${_include_dir} ${${_proj}_include_dir})
+	mark_as_advanced(${_proj}_include_dir)
 endmacro()
