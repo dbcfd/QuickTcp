@@ -4,7 +4,12 @@ file(GLOB HEADERS "*.h")
 
 file(GLOB SOURCES "*.cpp")
 
-SET (DEPENDENCIES ${async.cpp_LIBRARIES} Utilities)
+SET (DEPENDENCIES ${async.cpp_LIBRARIES} Utilities ${libuv_LIBRARIES})
+if(UNIX)
+	set(DEPENDENCIES ${DEPENDENCIES})
+else()
+	set(DEPENDENCIES ${DEPENDENCIES} ws2_32 Iphlpapi psapi)
+endif()
 
 add_library (${TARGET} ${HEADERS} ${SOURCES}) 
 target_link_libraries (${TARGET} ${DEPENDENCIES})
@@ -20,8 +25,10 @@ install (TARGETS ${TARGET}
 	LIBRARY DESTINATION ${BASE_DIRECTORY}/install/${TARGET}/${version}/lib
 	ARCHIVE DESTINATION ${BASE_DIRECTORY}/install/${TARGET}/${version}/lib)
     
-include(DllInstaller)
-_COPY_DLLS(${TARGET} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${async.cpp_LIBRARIES})
+if(BUILD_SHARED_LIBS)
+	include(DllInstaller)
+	_COPY_DLLS(${TARGET} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${async.cpp_LIBRARIES} ${libuv_LIBRARIES})
+endif()
 
 SetVSTargetProperties(${TARGET})
 

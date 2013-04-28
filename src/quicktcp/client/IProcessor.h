@@ -19,7 +19,7 @@ public:
     /**
      * Process a response from the server. This is used to fulfill responses of client request actions.
      */
-    virtual async_cpp::async::AsyncFuture processResponse(std::shared_ptr<utilities::ByteStream> stream) = 0;
+    virtual async_cpp::async::AsyncResult processResponse(std::shared_ptr<utilities::ByteStream> stream) = 0;
 };
 
 //inline implementations
