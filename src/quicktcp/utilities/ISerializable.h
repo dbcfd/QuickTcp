@@ -15,7 +15,6 @@ class BinarySerializer;
 class UTILITIES_API ISerializable
 {
 public:
-	ISerializable();
     virtual ~ISerializable();
 
 	/**
@@ -33,7 +32,7 @@ public:
      * Estimate the size of this object. This allows serializer to minimize allocations for writes.
      * @return Estimated size of object
      */
-    virtual size_t estimateSize() const = 0;
+    virtual stream_size_t estimateSize() const = 0;
 
 private:
     

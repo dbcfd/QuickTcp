@@ -14,19 +14,26 @@ namespace utilities {
 class UTILITIES_API BinarySerializer
 {
 public:
+    class UTILITIES_API IStringSizeCheck {
+    public:
+        virtual ~IStringSizeCheck();
+
+        virtual bool isValidStringSize(stream_size_t size) const = 0;
+    };
+
     /**
      * Create a serializer with a buffer of expected size and with no data. This constructor
      * is best used when preparing to write an object to binary.
      * @param expectedSize Expected size of buffer. Initial buffer size will be set to this. Correct buffer sizes reduce allocations
      */
-    BinarySerializer(size_t expectedSize = 1000);
+    BinarySerializer(stream_size_t expectedSize = 1000);
     /**
      * Create a serializer from a buffer and size. This constructor is best used when preparing
      * to set an object's state from a buffer. The buffer is copied with this constructor.
      * @param buffer Buffer to copy from
      * @param size Size of buffer
      */
-    BinarySerializer(const void* buffer, size_t size);
+    BinarySerializer(const stream_data_t* buffer, stream_size_t size);
     /**
      * Create a serializer from a buffer and size. This constructor is best used when preparing
      * to set an object's state from a buffer. The buffer may simply be owned dependent on parameters.
@@ -34,38 +41,51 @@ public:
      * @param size Size of buffer
      * @param takeOwnershipOfBuffer Whether the buffer should be copied or owned
      */
-    BinarySerializer(void* buffer, size_t size, const bool takeOwnershipOfBuffer);
+    BinarySerializer(stream_data_t* buffer, stream_size_t size, const bool takeOwnershipOfBuffer);
     ~BinarySerializer();
 
     bool writeString(const std::string& str);
+    bool writeEof();
     bool readString(std::string& str);
+    bool readEof();
 
     template<class T>
     bool writeT(const T& obj);
     template<class T>
-    bool writeT(const T* obj, const size_t arraySize);
+    bool writeT(const T* obj, const stream_size_t arraySize);
     template<class T>
-    bool writeT(const T& obj, const size_t objSize, const size_t objCount);
+    bool writeT(const T& obj, const stream_size_t objSize, const stream_size_t objCount);
 
     template<class T>
     bool readT(T& obj);
     template<class T>
-    bool readT(T* obj, const size_t arraySize);
+    bool readT(T* obj, const stream_size_t arraySize);
     template<class T>
-    bool readT(T& obj, const size_t objSize, const size_t objCount);
+    bool readT(T& obj, const stream_size_t objSize, const stream_size_t objCount);
 
-    inline void skip(const size_t size);
+    /**
+     * Copy stream from current position to end, into a byte stream
+     */
+    std::shared_ptr<utilities::ByteStream> toStream() const;
+    /**
+     * Transfer entire stream into a byte stream
+     */
+    std::shared_ptr<utilities::ByteStream> transferToStream();
+
+    inline void skip(const stream_size_t size);
     inline bool readComplete() const;
-    inline const void* buffer() const;
-    inline size_t size() const;
-    inline size_t bytesRead() const;
-    inline void* transferBuffer();
+    inline const stream_data_t* buffer() const;
+    inline stream_size_t size() const;
+    inline stream_size_t bytesRead() const;
+    inline stream_data_t* transferBuffer();
     inline void resetPosition();
+    inline void checkStringSize(std::shared_ptr<IStringSizeCheck> checker);
 private:
-    char* mPosition;
-    char* mBuffer;
-    size_t mSize;
-    size_t mAllocatedSize;
+    stream_data_t* mPosition;
+    stream_data_t* mBuffer;
+    stream_size_t mSize;
+    stream_size_t mAllocatedSize;
+    std::shared_ptr<IStringSizeCheck> mStringSizeCheck;
 };
 
 //Inline implementations
@@ -73,37 +93,37 @@ private:
 template<class T>
 bool BinarySerializer::writeT(const T& obj)
 {
-    return writeT(obj, sizeof(obj), 1);
+    return writeT(obj, (stream_size_t)sizeof(obj), 1);
 }
 
 //------------------------------------------------------------------------------
 template<class T>
-bool BinarySerializer::writeT(const T* obj, const size_t arraySize)
+bool BinarySerializer::writeT(const T* obj, const stream_size_t arraySize)
 {
-    return (0 != obj && writeT(*obj, sizeof(T), arraySize));
+    return (0 != obj && writeT(*obj, (stream_size_t)sizeof(T), arraySize));
 }
 
 //------------------------------------------------------------------------------
 template<class T>
-bool BinarySerializer::writeT(const T& obj, const size_t objSize, const size_t objCount)
+bool BinarySerializer::writeT(const T& obj, const stream_size_t objSize, const stream_size_t objCount)
 {
     bool ret = (0 != mBuffer);
     if(ret)
     {
-        size_t writeSize = sizeof(char) * objSize * objCount;
-        size_t sizeRequired = mSize + writeSize;
+        auto writeSize = (stream_size_t)sizeof(char) * objSize * objCount;
+        auto sizeRequired = mSize + writeSize;
         if(mAllocatedSize < sizeRequired)
         {
-            size_t newSize = mAllocatedSize * 2;
+            auto newSize = mAllocatedSize * 2;
             if(sizeRequired > newSize)
             {
                 newSize = sizeRequired;
             }
             mAllocatedSize = newSize;
-            char* resizedBuffer = (char*)malloc(sizeof(char) * mAllocatedSize);
+            auto resizedBuffer = new stream_data_t[mAllocatedSize];
             memset(resizedBuffer, 0, mAllocatedSize);
             memcpy(resizedBuffer, mBuffer, mSize);
-            free(mBuffer);
+            delete[] mBuffer;
             mBuffer = resizedBuffer;
             mPosition = mBuffer + mSize;
         }
@@ -123,18 +143,17 @@ bool BinarySerializer::readT(T& obj)
 
 //------------------------------------------------------------------------------
 template<class T>
-bool BinarySerializer::readT(T* obj, const size_t arraySize)
+bool BinarySerializer::readT(T* obj, const stream_size_t arraySize)
 {
-    return (0 != obj && readT(*obj, sizeof(T), arraySize));
+    return (0 != obj && readT(*obj, (stream_size_t)sizeof(T), arraySize));
 }
 
 //------------------------------------------------------------------------------
 template<class T>
-bool BinarySerializer::readT(T& obj, const size_t objSize, const size_t objCount)
+bool BinarySerializer::readT(T& obj, const stream_size_t objSize, const stream_size_t objCount)
 {
-    size_t sizeUtilized = mPosition - mBuffer;
-    size_t sizeRequired = objSize * objCount;
-    bool ret = (mSize - sizeUtilized >= sizeRequired);
+    auto sizeRequired = objSize * objCount;
+    bool ret = (mSize - bytesRead() >= sizeRequired);
     if(ret)
     {
         memcpy(&obj, mPosition, sizeRequired);
@@ -144,10 +163,9 @@ bool BinarySerializer::readT(T& obj, const size_t objSize, const size_t objCount
 }
 
 //------------------------------------------------------------------------------
-void BinarySerializer::skip(const size_t count)
+void BinarySerializer::skip(const stream_size_t count)
 {
-    size_t sizeRead = mPosition - mBuffer;
-    size_t maxSkip = std::min(mSize - sizeRead, count);
+    auto maxSkip = std::min(mSize - bytesRead(), count);
     mPosition += maxSkip;
 }
 
@@ -158,27 +176,27 @@ bool BinarySerializer::readComplete() const
 }
 
 //------------------------------------------------------------------------------
-const void* BinarySerializer::buffer() const
+const stream_data_t* BinarySerializer::buffer() const
 {
-    return (void*)mBuffer;
+    return mBuffer;
 }
 
 //------------------------------------------------------------------------------
-size_t BinarySerializer::size() const
+stream_size_t BinarySerializer::size() const
 {
     return mSize;
 }
 
 //------------------------------------------------------------------------------
-size_t BinarySerializer::bytesRead() const
+stream_size_t BinarySerializer::bytesRead() const
 {
-    return (mPosition - mBuffer);
+    return (stream_size_t)std::distance(mBuffer, mPosition);
 }
 
 //------------------------------------------------------------------------------
-void* BinarySerializer::transferBuffer()
+stream_data_t* BinarySerializer::transferBuffer()
 {
-    void* retBuffer = mBuffer;
+    auto retBuffer = mBuffer;
     mBuffer = nullptr;
     mSize = 0;
     mAllocatedSize = 0;
@@ -190,6 +208,12 @@ void* BinarySerializer::transferBuffer()
 void BinarySerializer::resetPosition()
 {
     mPosition = mBuffer;
+}
+
+//------------------------------------------------------------------------------
+void BinarySerializer::checkStringSize(std::shared_ptr<BinarySerializer::IStringSizeCheck> checker)
+{
+    mStringSizeCheck = checker;
 }
 
 }

@@ -4,14 +4,14 @@ namespace quicktcp {
 namespace utilities {
 
 //------------------------------------------------------------------------------
-ByteStream::ByteStream(const void* buffer, const size_t size) : mSize(size)
+ByteStream::ByteStream(const stream_data_t* buffer, const stream_size_t size) : mSize(size)
 {
-    mBuffer = malloc(sizeof(char) * size);
+    mBuffer = new stream_data_t[size];
     memcpy(mBuffer, buffer, size);
 }
 
 //------------------------------------------------------------------------------
-ByteStream::ByteStream(void* buffer, const size_t size, const bool takeOwnershipOfBuffer)
+ByteStream::ByteStream(stream_data_t* buffer, const stream_size_t size, const bool takeOwnershipOfBuffer)
 {
     if(takeOwnershipOfBuffer)
     {
@@ -19,7 +19,7 @@ ByteStream::ByteStream(void* buffer, const size_t size, const bool takeOwnership
     }
     else
     {
-        mBuffer = malloc(sizeof(char) * size);
+        mBuffer = new stream_data_t[size];
         memcpy(mBuffer, buffer, size);
     }
     mSize = size;
@@ -28,19 +28,17 @@ ByteStream::ByteStream(void* buffer, const size_t size, const bool takeOwnership
 //------------------------------------------------------------------------------
 ByteStream::~ByteStream()
 {
-    free(mBuffer);
+    delete[] mBuffer;
 }
 
 //------------------------------------------------------------------------------
-void ByteStream::append(std::shared_ptr<ByteStream> other)
+std::shared_ptr<ByteStream> ByteStream::append(std::shared_ptr<ByteStream> other) const
 {
-    auto newSize = mSize + other->size();
-    auto oldBuffer = mBuffer;
-    mBuffer = malloc(sizeof(char) * newSize);
-    auto bufPos = memcpy(mBuffer, oldBuffer, mSize);
-    free(oldBuffer);
+    auto combinedSize = mSize + other->size();
+    auto combinedBuffer = new stream_data_t[combinedSize];
+    auto bufPos = memcpy(combinedBuffer, mBuffer, mSize);
     memcpy(bufPos, other->buffer(), other->size());
-    mSize = newSize;
+    return std::make_shared<ByteStream>(combinedBuffer, combinedSize, true);
 }
 
 }

@@ -17,51 +17,51 @@ public:
      * @param buffer Buffer to copy
      * @param size Size of buffer
      */
-    ByteStream(const void* buffer, const size_t size);
+    ByteStream(const stream_data_t* buffer, const stream_size_t size);
     /**
      * Construct a byte stream by copying or taking ownership of a buffer with some size.
      * @param buffer Buffer to copy or own. If owning, buffer should be malloc'd
      * @param size Size of buffer
      * @param takeOwnershipOfBuffer Whether buffer should be copied or own
      */
-    ByteStream(void* buffer, const size_t size, const bool takeOwnershipOfBuffer = false);
+    ByteStream(stream_data_t* buffer, const stream_size_t size, const bool takeOwnershipOfBuffer = false);
     ~ByteStream();
 
     /**
-     * Append the contents of another bytestream to this stream, taking ownership of the stream.
+     * Append the contents of another bytestream to this stream, creating a new stream
      */
-    void append(std::shared_ptr<ByteStream> other);
+    std::shared_ptr<ByteStream> append(std::shared_ptr<ByteStream> other) const;
 
     /**
      * Transfer ownership of this bytestream's buffer. Buffer is returned, but member buffer is set to nullptr.
      * @return Buffer that was held by this byte stream. Buffer is allocated with malloc, so should be free'd.
      */
-    inline const void* transferBuffer();
-    inline const void* buffer() const;
-    inline const size_t size() const;
+    inline stream_data_t* transferBuffer();
+    inline const stream_data_t* buffer() const;
+    inline const stream_size_t size() const;
 private:
-    void* mBuffer;
-    size_t mSize;
+    stream_data_t* mBuffer;
+    stream_size_t mSize;
 };
 
 //Inline Implementations
 //------------------------------------------------------------------------------
-const void* ByteStream::transferBuffer()
+stream_data_t* ByteStream::transferBuffer()
 {
-    const void* retBuffer = mBuffer;
+    auto retBuffer = mBuffer;
     mBuffer = nullptr;
     mSize = 0;
     return retBuffer;
 }
 
 //------------------------------------------------------------------------------
-const void* ByteStream::buffer() const
+const stream_data_t* ByteStream::buffer() const
 {
     return mBuffer;
 }
 
 //------------------------------------------------------------------------------
-const size_t ByteStream::size() const
+const stream_size_t ByteStream::size() const
 {
     return mSize;
 }

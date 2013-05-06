@@ -4,11 +4,6 @@ namespace quicktcp {
 namespace utilities {
 
 //------------------------------------------------------------------------------
-ISerializable::ISerializable()
-{
-}
-
-//------------------------------------------------------------------------------
 ISerializable::~ISerializable()
 {
 
