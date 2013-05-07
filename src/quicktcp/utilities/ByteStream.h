@@ -2,6 +2,7 @@
 
 #include "quicktcp/utilities/Platform.h"
 
+#include <iostream>
 #include <memory>
 
 namespace quicktcp {
@@ -39,6 +40,8 @@ public:
     inline stream_data_t* transferBuffer();
     inline const stream_data_t* buffer() const;
     inline const stream_size_t size() const;
+    inline const bool hasEof() const;
+    inline void appendEof();
 private:
     stream_data_t* mBuffer;
     stream_size_t mSize;
@@ -64,6 +67,22 @@ const stream_data_t* ByteStream::buffer() const
 const stream_size_t ByteStream::size() const
 {
     return mSize;
+}
+
+//------------------------------------------------------------------------------
+const bool ByteStream::hasEof() const
+{
+    return (std::ios::eofbit == (int)mBuffer[mSize-1]);
+}
+
+//------------------------------------------------------------------------------
+void ByteStream::appendEof()
+{
+    auto eofBuffer = new stream_data_t[mSize+1];
+    memmove(eofBuffer, mBuffer, mSize);
+    eofBuffer[mSize] = (stream_data_t)std::ios::eofbit;
+    mBuffer = eofBuffer;
+    mSize += 1;
 }
 
 }

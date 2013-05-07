@@ -16,8 +16,6 @@
 #endif
 
 namespace quicktcp {
-namespace utilities {
 typedef char stream_data_t;
 typedef unsigned long stream_size_t;
-}
 }
