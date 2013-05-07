@@ -3,11 +3,12 @@
 #include "quicktcp/server/Platform.h"
 #include "quicktcp/server/ServerInfo.h"
 
+#include <atomic>
 #include <memory>
 
-namespace async_cpp {
-namespace workers {
-class IManager;
+namespace boost {
+namespace asio {
+class io_service;
 }
 }
 
@@ -22,22 +23,25 @@ namespace server {
 class IResponder;
 
 /**
- * Server interface. Platform specific implementations will implement this interface, allowing
- * common access to the platform servers
+ * Implementation of a tcp server relying on boost::asio for tcp networking activities
  */
-class SERVER_API IServer {
+class SERVER_API Server {
 public:
-    IServer(const quicktcp::server::ServerInfo& info, 
-        std::shared_ptr<async_cpp::workers::IManager> mgr, 
+    Server(std::shared_ptr<boost::asio::io_service> ioService, 
+        const ServerInfo& info, 
         std::shared_ptr<IResponder> responder);
+    ~Server();
 
-    virtual void shutdown() = 0;
-    virtual void waitForEvents() = 0;
+    void shutdown();
+    void waitForEvents();
 
 protected:
-    ServerInfo mInfo;
-    std::shared_ptr<async_cpp::workers::IManager> mManager;
-    std::shared_ptr<quicktcp::server::IResponder> mResponder;
+    class TcpConnection;
+    class TcpServer;
+
+    std::atomic_bool mRunning;
+    std::unique_ptr<TcpServer> mServer;
+    std::shared_ptr<boost::asio::io_service> mService;
 };
 
 //inline implementations

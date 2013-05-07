@@ -3,5 +3,11 @@
 namespace quicktcp {
 namespace server {
 
+//------------------------------------------------------------------------------
+IResponder::~IResponder()
+{
+
+}
+
 }
 }

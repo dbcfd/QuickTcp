@@ -4,8 +4,13 @@ file(GLOB HEADERS "*.h")
 
 file(GLOB SOURCES "*.cpp")
 
-include_directories(${async.cpp_INCLUDE_DIRS})
-SET (DEPENDENCIES Utilities ${async.cpp_LIBRARIES})
+include_directories(${Boost_INCLUDE_DIRS})
+include_directories(${AsyncCpp_INCLUDE_DIRS})
+SET (DEPENDENCIES Utilities ${AsyncCpp_LIBRARIES} ${Boost_LIBRARIES})
+add_definitions("-DHAS_BOOST -D_WIN32_WINNT=0x0502")
+if(BUILD_SHARED_LIBS)
+	add_definitions("-DBOOST_ALL_DYN_LINK")
+endif()
 
 add_library (${TARGET} ${HEADERS} ${SOURCES}) 
 target_link_libraries (${TARGET} ${DEPENDENCIES})
@@ -22,7 +27,7 @@ install (TARGETS ${TARGET}
 	ARCHIVE DESTINATION ${BASE_DIRECTORY}/install/${TARGET}/${version}/lib)
 
 include(DllInstaller)
-_COPY_DLLS(${TARGET} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${async.cpp_LIBRARIES})
+_COPY_DLLS(${TARGET} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${AsyncCpp_LIBRARIES} ${Boost_LIBRARIES})
 
 SetVSTargetProperties(${TARGET})
 

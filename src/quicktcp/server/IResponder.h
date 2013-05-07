@@ -2,14 +2,7 @@
 
 #include "quicktcp/server/Platform.h"
 
-#include <future>
 #include <memory>
-
-namespace async_cpp {
-namespace async {
-class AsyncResult;
-}
-}
 
 namespace quicktcp {
 
@@ -21,9 +14,13 @@ namespace server {
 
 class SERVER_API IResponder {
 public:       
-    virtual bool authenticateConnection(std::shared_ptr<utilities::ByteStream> stream) = 0;
-    virtual async_cpp::async::AsyncResult respond(std::shared_ptr<utilities::ByteStream> stream) = 0;
-    virtual void handleErrorSendingResponse(async_cpp::async::AsyncResult& result) = 0;
+    virtual ~IResponder();
+
+    virtual bool authenticateConnection() = 0;
+    virtual std::shared_ptr<utilities::ByteStream> respond(std::shared_ptr<utilities::ByteStream> stream) = 0;
+    virtual void handleErrorAccepting(const std::string& message) = 0;
+    virtual void handleErrorSendingResponse(const std::string& message) = 0;
+    virtual void handleErrorIncompleteSend() = 0;
     virtual void handleConnectionClosed() = 0;
 };
 
