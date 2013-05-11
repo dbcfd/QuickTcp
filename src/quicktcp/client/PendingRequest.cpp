@@ -1,4 +1,4 @@
-#include "quicktcp/client/IProcessor.h"
+#include "quicktcp/client/PendingRequest.h"
 
 namespace quicktcp {
 namespace client {

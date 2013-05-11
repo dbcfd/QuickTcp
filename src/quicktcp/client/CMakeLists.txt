@@ -4,11 +4,17 @@ file(GLOB HEADERS "*.h")
 
 file(GLOB SOURCES "*.cpp")
 
-SET (DEPENDENCIES ${async.cpp_LIBRARIES} Utilities ${libuv_LIBRARIES})
+include_directories(${Boost_INCLUDE_DIRS})
+include_directories(${AsyncCpp_INCLUDE_DIRS})
+SET (DEPENDENCIES ${AsyncCpp_LIBRARIES} Utilities ${Boost_LIBRARIES})
 if(UNIX)
 	set(DEPENDENCIES ${DEPENDENCIES})
 else()
 	set(DEPENDENCIES ${DEPENDENCIES} ws2_32 Iphlpapi psapi)
+endif()
+
+if(BUILD_SHARED_LIBS)
+	add_definitions("-DBOOST_ALL_DYN_LINK")
 endif()
 
 add_library (${TARGET} ${HEADERS} ${SOURCES}) 
@@ -25,10 +31,8 @@ install (TARGETS ${TARGET}
 	LIBRARY DESTINATION ${BASE_DIRECTORY}/install/${TARGET}/${version}/lib
 	ARCHIVE DESTINATION ${BASE_DIRECTORY}/install/${TARGET}/${version}/lib)
     
-if(BUILD_SHARED_LIBS)
-	include(DllInstaller)
-	_COPY_DLLS(${TARGET} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${async.cpp_LIBRARIES} ${libuv_LIBRARIES})
-endif()
+include(DllInstaller)
+_COPY_DLLS(${TARGET} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY} ${AsyncCpp_LIBRARIES} ${Boost_LIBRARIES})
 
 SetVSTargetProperties(${TARGET})
 

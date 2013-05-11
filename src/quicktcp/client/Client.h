@@ -1,106 +1,234 @@
 #pragma once
 
 #include "quicktcp/client/Platform.h"
+#include "quicktcp/client/IAuthenticator.h"
 #include "quicktcp/client/ServerInfo.h"
+#include "quicktcp/client/PendingRequest.h"
 
-#include <async/Async.h>
-
-#include <uv.h>
+#include <async_cpp/async/Async.h>
+#include <boost/asio.hpp>
+#include <condition_variable>
+#include <future>
+#include <queue>
 
 namespace quicktcp {
-
-namespace utilities {
-class ByteStream;
-}
-
 namespace client {
 
-class IProcessor;
+class IAuthenticator;
+template<class T> class IProcessor;
 
-class CLIENT_API Client : public std::enable_shared_from_this<Client> {
+template<class TRESULT = utilities::ByteStream>
+class CLIENT_API Client : public std::enable_shared_from_this<Client<TRESULT>> {
 public:
-    Client(uv_loop_t& loop,
-        const ServerInfo& info, 
-        std::shared_ptr<utilities::ByteStream> authentication);
+    Client(boost::asio::io_service& ioService,
+        const ServerInfo& info,
+        std::shared_ptr<IProcessor<TRESULT>> processor, 
+        std::shared_ptr<IAuthenticator> authenticator = std::shared_ptr<IAuthenticator>());
     virtual ~Client();
 
-    async_cpp::async::AsyncFuture request(std::shared_ptr<utilities::ByteStream> stream);
+    std::future<async_cpp::async::AsyncResult<TRESULT>> request(std::shared_ptr<utilities::ByteStream> stream);
+    void connect();
     void disconnect();
     void waitForConnection();
 
-    inline size_t bufferSize() const;
-    inline void setProcessor(std::shared_ptr<IProcessor> processor);
-    inline bool isConnected() const;
+    size_t bufferSize() const;
+    bool isConnected() const;
 
 protected:
-    struct ConnectRequest {
-        ConnectRequest(std::shared_ptr<Client> client);
+    void authenticate(const boost::system::error_code& ec);
+    void performRequest(std::shared_ptr<PendingRequest<TRESULT>> request) const;
+    void onWriteComplete(std::shared_ptr<PendingRequest<TRESULT>> request, const boost::system::error_code& ec, std::size_t nbBytes);
+    void onReceiveComplete(std::shared_ptr<PendingRequest<TRESULT>> request, const boost::system::error_code& ec, std::size_t nbBytes);
 
-        uv_connect_t connect;
-        std::shared_ptr<Client> client;
-    };
+    std::queue<std::shared_ptr<PendingRequest<TRESULT>>> mPendingRequests;
+    std::mutex mRequestsMutex;
 
-    struct WriteRequest {
-        WriteRequest(std::shared_ptr<Client> client);
-
-        uv_write_t req;
-        uv_buf_t buf;
-        std::promise<async_cpp::async::AsyncResult> promise;
-        std::shared_ptr<Client> client;
-    };
-
-    struct ReadRequest {
-        ReadRequest(std::shared_ptr<Client> client, std::promise<async_cpp::async::AsyncResult>& promise);
-
-        uv_stream_t* stream;
-        char* buffer;
-        std::promise<async_cpp::async::AsyncResult> promise;
-        std::shared_ptr<Client> client;
-        std::shared_ptr<utilities::ByteStream> readStream;
-    };
-
-    struct ProcessRequest {
-        ProcessRequest(std::shared_ptr<Client> client, 
-            std::promise<async_cpp::async::AsyncResult>& promise,
-            std::shared_ptr<utilities::ByteStream> stream);
-
-        uv_work_t work;
-        std::shared_ptr<Client> client;
-        std::promise<async_cpp::async::AsyncResult> promise;
-        std::shared_ptr<utilities::ByteStream> stream;
-    };
-
-    void onConnect(int status);
-    void onReadComplete(ssize_t nread, uv_buf_t buf, ReadRequest& req);
-    void onWriteComplete(int status, std::promise<async_cpp::async::AsyncResult>& promise);
-    void process(std::shared_ptr<utilities::ByteStream> stream, std::promise<async_cpp::async::AsyncResult>& promise) const;
-
-    std::shared_ptr<utilities::ByteStream> mAuthentication;
-    std::shared_ptr<IProcessor> mProcessor;
-    std::thread mThread;
+    std::shared_ptr<IAuthenticator> mAuthenticator;
+    std::shared_ptr<IProcessor<TRESULT>> mProcessor;
     ServerInfo mInfo;
-    uv_tcp_t mSocket;
-    uv_loop_t& mLoop;
+    std::shared_ptr<boost::asio::ip::tcp::socket> mSocket;
+    boost::asio::io_service& mService;
     bool mIsConnected;
     std::condition_variable mConnectedSignal;
-
-    //c callbacks need friend
-    friend void ClientConnectCallback(uv_connect_t* req, int status);
-    friend uv_buf_t ClientAllocationCallback(uv_handle_t* handle, size_t suggested_size);
-    friend void ClientReadCallback(uv_stream_t* stream, ssize_t nread, uv_buf_t buf);
-    friend void ClientWriteCallback(uv_write_t* req, int status);
-    friend void ClientProcessRequest(uv_work_t* req);
 };
 
 //inline implementations
 //------------------------------------------------------------------------------
-void Client::setProcessor(std::shared_ptr<IProcessor> processor)
+template<class TRESULT>
+Client<TRESULT>::Client(boost::asio::io_service& ioService,
+    const ServerInfo& info,
+    std::shared_ptr<IProcessor<TRESULT>> processor,
+    std::shared_ptr<IAuthenticator> authenticator)
+    : mInfo(info), mIsConnected(false), mService(ioService), mAuthenticator(authenticator), mProcessor(processor)
 {
-    mProcessor = processor;
+    assert(processor);
 }
 
 //------------------------------------------------------------------------------
-bool Client::isConnected() const
+template<class TRESULT>
+Client<TRESULT>::~Client()
+{
+    disconnect();
+}
+
+//------------------------------------------------------------------------------
+template<class TRESULT>
+void Client<TRESULT>::connect()
+{
+    auto thisPtr = shared_from_this();
+    mInfo.resolveAddress(mService, [thisPtr, this](const boost::system::error_code& ec, boost::asio::ip::tcp::resolver::iterator iter) -> void {
+        if(!ec)
+        {
+            mSocket = std::make_shared<boost::asio::ip::tcp::socket>(mService);
+            mSocket->async_connect(*iter, std::bind(&Client::authenticate, this, std::placeholders::_1));
+        }
+        else
+        {
+            mProcessor->handleErrorResolveAddress(ec.message());
+        }   
+    } )
+}
+
+//------------------------------------------------------------------------------
+template<class TRESULT>
+void Client<TRESULT>::authenticate(const boost::system::error_code& ec)
+{
+    if(!ec)
+    {
+        bool authenticated = true;
+        if(mAuthenticator)
+        {
+            authenticated = mAuthenticator->authenticate(mSocket);
+        }
+        if(authenticated)
+        {
+            mIsConnected = true;
+            mConnectedSignal.notify_all();
+        }
+    }
+    else
+    {
+        mProcessor->handleErrorConnect(ec.message());
+    }
+}
+
+//------------------------------------------------------------------------------
+template<class TRESULT>
+void Client<TRESULT>::disconnect()
+{
+    mIsConnected = false;
+    mSocket->close();
+
+}
+
+//------------------------------------------------------------------------------
+template<class TRESULT>
+void Client<TRESULT>::waitForConnection()
+{
+    std::mutex mutex;
+    std::unique_lock<std::mutex> lock(mutex);
+    mConnectedSignal.wait(lock, [this]()->bool {
+        return mIsConnected;
+    } );
+}
+
+//------------------------------------------------------------------------------
+template<class TRESULT>
+std::future<async_cpp::async::AsyncResult<TRESULT>> Client<TRESULT>::request(std::shared_ptr<utilities::ByteStream> stream)
+{
+    std::future<async_result_t> result;
+    if(mIsConnected)
+    {
+        auto req = std::make_shared<PendingRequest>(stream);
+        result = req->getFuture();
+        std::lock_guard<std::mutex> lock(mRequestsMutex);
+        if(mPendingRequests.empty())
+        {
+            performRequest(req);
+        }
+        mPendingRequests.emplace(req);
+    }
+    else
+    {
+        result = async_result_t("Client: Client is disconnected").asFulfilledFuture();
+    }
+    return result;
+}
+
+//------------------------------------------------------------------------------
+template<class TRESULT>
+void Client<TRESULT>::performRequest(std::shared_ptr<PendingRequest<TRESULT>> request) const
+{
+    auto thisPtr = shared_from_this();
+    mSocket->async_send(req->sendBuffers(), [req, thisPtr, this](const boost::system::error_code& ec, std::size_t nbBytes) -> void {
+        onWriteComplete(req, ec, nbBytes);
+    } );
+}
+
+//------------------------------------------------------------------------------
+template<class TRESULT>
+void Client<TRESULT>::onWriteComplete(std::shared_ptr<PendingRequest<TRESULT>> request, const boost::system::error_code& ec, std::size_t nbBytes)
+{
+    //begin read
+    if(!ec)
+    {
+        if(request->wasSendValid)
+        {
+            auto thisPtr = shared_from_this();
+            mSocket->async_receive(request->recvBuffers(), [request, thisPtr, this](const boost::system::error_code& ec, std::size_t nbBytes)
+            {
+                onReceiveComplete(request, ec, nbBytes);
+            } );
+        }
+        else
+        {
+            disconnect();
+            request->fail("Client: Failed to send complete message");
+        }
+    }
+    else
+    {
+        disconnect();
+        request->fail(ec.message());
+    }
+}
+
+//------------------------------------------------------------------------------
+template<class TRESULT>
+void Client<TRESULT>::onReceiveComplete(std::shared_ptr<PendingRequest<TRESULT>> request, const boost::system::error_code& ec, std::size_t nbBytes)
+{
+    if(!ec)
+    {
+        request->appendData(nbBytes);
+        auto thisPtr = shared_from_this();
+        mService.post([thisPtr, this, request]()->void {
+            request->complete(mProcessor);
+        } );
+        std::shared_ptr<PendingRequest> nextRequest;
+        {
+            std::lock_guard<std::mutex> lock(mRequestsMutex);
+            mPendingRequests.pop();
+            if(!mPendingRequests.empty())
+            {
+                nextRequest = mPendingRequests.front();
+            }
+        }
+        if(nextRequest)
+        {
+            performRequest(nextRequest);
+        }
+    }
+    else
+    {
+        //check if partial send
+
+        //else disconnect
+    }
+}
+
+//------------------------------------------------------------------------------
+template<class TRESULT>
+bool Client<TRESULT>::isConnected() const
 {
     return mIsConnected;
 }

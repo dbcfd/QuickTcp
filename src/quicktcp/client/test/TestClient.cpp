@@ -80,10 +80,20 @@ public:
         uv_tcp_init(&loop, &server);
 
         struct sockaddr_in bind_addr = uv_ip4_addr("127.0.0.1", port);
-        uv_tcp_bind(&server, bind_addr);
-        server.data = &loop;
+        if(-1 == uv_tcp_bind(&server, bind_addr))
+        {
+            throw(std::runtime_error("Error binding to port"));
+        }
+        else
+        {
+            server.data = &loop;
 
-        auto r = uv_listen((uv_stream_t*)&server, 50, &ServerConnectionCallback);
+            auto r = uv_listen((uv_stream_t*)&server, 50, &ServerConnectionCallback);
+            if(-1 == r)
+            {
+                throw(std::runtime_error("Error listening for connections"));
+            }
+        }
     }
 
     ~MockServer()
@@ -96,17 +106,38 @@ public:
     char* buffer;
 };
 
-TEST(CLIENT_TEST, CLIENT_CONNECT)
+class ClientTest : public testing::Test
 {
-    auto loop = uv_default_loop();
+public:
 
-    auto server = std::make_shared<MockServer>(*loop, 4444);
-    auto thread = std::thread([loop]()-> void {
-        uv_run(loop, UV_RUN_DEFAULT);
-    } );
+    virtual void SetUp() final
+    {
+        port = 4444;
+        loop = uv_default_loop();
+        ASSERT_NO_THROW(server = std::make_shared<MockServer>(*loop, port));
+        thread = std::thread([this]()->void {
+            uv_run(loop, UV_RUN_DEFAULT);
+            std::cout << "loop complete" << std::endl;
+        } );
+    }
 
-    auto client = std::make_shared<Client>(*loop, ServerInfo("localhost", 4444), std::shared_ptr<utilities::ByteStream>());
+    virtual void TearDown() final
+    {
+        uv_stop(loop);
+        thread.join();
+    }
 
+    uv_loop_t* loop;
+    std::thread thread;
+    std::shared_ptr<MockServer> server;
+    int port;
+};
+
+TEST_F(ClientTest, CLIENT_CONNECT)
+{
+    auto client = std::make_shared<Client>(*loop, ServerInfo("127.0.0.1", port), std::shared_ptr<utilities::ByteStream>());
+
+    ASSERT_NO_THROW(client->connect());
     EXPECT_NO_THROW(client->waitForConnection());
     EXPECT_TRUE(client->isConnected());
 
@@ -120,17 +151,11 @@ TEST(CLIENT_TEST, CLIENT_CONNECT)
     EXPECT_FALSE(client->isConnected());
 }
 
-TEST(CLIENT_TEST, CLIENT_REQUEST)
+TEST_F(ClientTest, CLIENT_REQUEST)
 {
-    auto loop = uv_default_loop();
+    auto client = std::make_shared<Client>(*loop, ServerInfo("127.0.0.1", port), std::shared_ptr<utilities::ByteStream>());
 
-    auto server = std::make_shared<MockServer>(*loop, 4444);
-    auto thread = std::thread([loop]()-> void {
-        uv_run(loop, UV_RUN_DEFAULT);
-    } );
-
-    auto client = std::make_shared<Client>(*loop, ServerInfo("localhost", 4444), std::shared_ptr<utilities::ByteStream>());
-
+    ASSERT_NO_THROW(client->connect());
     EXPECT_NO_THROW(client->waitForConnection());
     EXPECT_TRUE(client->isConnected());
 
@@ -145,4 +170,7 @@ TEST(CLIENT_TEST, CLIENT_REQUEST)
     EXPECT_NO_THROW(client->disconnect());
 
     EXPECT_FALSE(client->isConnected());
+
+    uv_stop(loop);
+    thread.join();
 }

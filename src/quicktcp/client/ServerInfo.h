@@ -2,9 +2,8 @@
 
 #include "quicktcp/client/Platform.h"
 
+#include <boost/asio.hpp>
 #include <functional>
-
-#include <uv.h>
 
 namespace quicktcp {
 namespace client {
@@ -17,12 +16,11 @@ public:
    inline const std::string& address() const;
    inline const unsigned int port() const;
 
-   void resolveAddress(uv_loop_t& loop, std::function<void(int, struct addrinfo*)> onResolution);
+   void resolveAddress(boost::asio::io_service& ioService, std::function<void(const boost::system::error_code&, boost::asio::ip::tcp::resolver::iterator)> onResolution);
 
 private:
    std::string mServerAddress;
    unsigned int mPort;
-   uv_getaddrinfo_t mResolver;
 };
 
 //inline implementations

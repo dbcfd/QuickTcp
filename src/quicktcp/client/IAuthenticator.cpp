@@ -1,9 +1,13 @@
-#include "quicktcp/client/IProcessor.h"
+#include "quicktcp/client/IAuthenticator.h"
 
 namespace quicktcp {
 namespace client {
 
 //------------------------------------------------------------------------------
+IAuthenticator::~IAuthenticator()
+{
+
+}
 
 }
 }
