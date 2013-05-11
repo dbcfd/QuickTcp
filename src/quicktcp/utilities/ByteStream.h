@@ -42,6 +42,7 @@ public:
     inline const stream_size_t size() const;
     inline const bool hasEof() const;
     inline void appendEof();
+    inline void stripEof();
 private:
     stream_data_t* mBuffer;
     stream_size_t mSize;
@@ -79,10 +80,21 @@ const bool ByteStream::hasEof() const
 void ByteStream::appendEof()
 {
     auto eofBuffer = new stream_data_t[mSize+1];
-    memmove(eofBuffer, mBuffer, mSize);
+    memcpy(eofBuffer, mBuffer, mSize);
+    delete[] mBuffer;
     eofBuffer[mSize] = (stream_data_t)std::ios::eofbit;
     mBuffer = eofBuffer;
     mSize += 1;
+}
+
+//------------------------------------------------------------------------------
+void ByteStream::stripEof()
+{
+    auto eofBuffer = new stream_data_t[mSize-1];
+    memcpy(eofBuffer, mBuffer, mSize-1);
+    delete[] mBuffer;
+    mBuffer = eofBuffer;
+    mSize -= 1;
 }
 
 }
