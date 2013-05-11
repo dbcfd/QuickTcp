@@ -43,6 +43,6 @@ if(BUILD_TESTS)
 	enable_testing()
 endif()
 #project source
-find_package(libuv 0.9.1 REQUIRED)
-find_package(async.cpp 0.7.0 REQUIRED)
+find_package(Boost 1.53.0 REQUIRED COMPONENTS date_time system regex)
+find_package(AsyncCpp 0.10.2 REQUIRED)
 add_subdirectory(src)

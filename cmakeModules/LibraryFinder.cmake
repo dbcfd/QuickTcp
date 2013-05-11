@@ -6,11 +6,11 @@ macro(_FIND_LIBRARY_FOR _proj _var)
 			${ARGN}
 		HINTS
 			${${_proj}_ROOT}/${${_proj}_FIND_VERSION}/lib
-			${THIRDPARTY_LIB_DIR}/${_proj}/${${_proj}_VERSION}/lib
+			${THIRDPARTY_LIB_DIR}/${_proj}/${${_proj}_FIND_VERSION}/lib
 		PATH_SUFFIXES lib
 	)
 	if(NOT ${_var})
-		message("--${_proj} : Failed to find ${ARGN} in ${${_proj}_ROOT}/${${_proj}_FIND_VERSION}/lib or ${THIRDPARTY_LIB_DIR}/${_proj}/${${_proj}_VERSION}/lib")
+		message("--${_proj} : Failed to find ${ARGN} in ${${_proj}_ROOT}/${${_proj}_FIND_VERSION}/lib or ${THIRDPARTY_LIB_DIR}/${_proj}/${${_proj}_FIND_VERSION}/lib")
 	endif()
 	mark_as_advanced(${_var})
 endmacro()
@@ -28,7 +28,7 @@ macro(_FIND_HEADER_FOR _proj _file _include_dir)
 	find_path(${_proj}_include_dir NAMES ${_file}
 		HINTS
 			${${_proj}_ROOT}/${${_proj}_FIND_VERSION}/include
-			${THIRDPARTY_LIB_DIR}/${_proj}/${${_proj}_VERSION}/include
+			${THIRDPARTY_LIB_DIR}/${_proj}/${${_proj}_FIND_VERSION}/include
 	)
 	set(${_include_dir} ${${_proj}_include_dir})
 	mark_as_advanced(${_proj}_include_dir)
