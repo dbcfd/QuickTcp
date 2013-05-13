@@ -1,5 +1,6 @@
 #include "quicktcp/utilities/BinarySerializer.h"
 
+#include <assert.h>
 #include <iostream>
 
 namespace quicktcp {
@@ -104,6 +105,7 @@ bool BinarySerializer::readEof()
 //------------------------------------------------------------------------------
 std::shared_ptr<utilities::ByteStream> BinarySerializer::toStream() const
 {
+    assert(mSize - bytesRead() > 0);
     return std::make_shared<utilities::ByteStream>(mPosition, mSize - bytesRead());
 }
 

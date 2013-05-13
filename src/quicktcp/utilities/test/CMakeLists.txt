@@ -1,7 +1,11 @@
 set (TARGET TestUtilities)
 
 set(HEADERS)
-file(GLOB SOURCES "*.cpp")
+set(SOURCES
+	TestBinarySerializer.cpp
+	TestByteStream.cpp
+	TestRunner.cpp
+)
 
 include(UseGtest)
 UseGtest(${TARGET} DEPENDENCIES ${SOURCES})

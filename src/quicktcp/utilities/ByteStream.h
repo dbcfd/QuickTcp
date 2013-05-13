@@ -25,7 +25,7 @@ public:
      * @param size Size of buffer
      * @param takeOwnershipOfBuffer Whether buffer should be copied or own
      */
-    ByteStream(stream_data_t* buffer, const stream_size_t size, const bool takeOwnershipOfBuffer = false);
+    ByteStream(stream_data_t* buffer, const stream_size_t size, const bool takeOwnershipOfBuffer);
     ~ByteStream();
 
     /**
@@ -73,28 +73,35 @@ const stream_size_t ByteStream::size() const
 //------------------------------------------------------------------------------
 const bool ByteStream::hasEof() const
 {
-    return (std::ios::eofbit == (int)mBuffer[mSize-1]);
+    bool hasEof = false;
+    if(mSize >= sizeof(std::ios::eofbit))
+    {
+        int possibleEof = 0;
+        memcpy(&possibleEof, mBuffer+mSize-sizeof(std::ios::eofbit), sizeof(std::ios::eofbit));
+        hasEof = (std::ios::eofbit == possibleEof);
+    }
+    return hasEof;
 }
 
 //------------------------------------------------------------------------------
 void ByteStream::appendEof()
 {
-    auto eofBuffer = new stream_data_t[mSize+1];
+    auto eofBuffer = new stream_data_t[mSize+sizeof(std::ios::eofbit)];
     memcpy(eofBuffer, mBuffer, mSize);
     delete[] mBuffer;
-    eofBuffer[mSize] = (stream_data_t)std::ios::eofbit;
+    memcpy(eofBuffer+mSize, &std::ios::eofbit, sizeof(std::ios::eofbit));
     mBuffer = eofBuffer;
-    mSize += 1;
+    mSize += sizeof(std::ios::eofbit);
 }
 
 //------------------------------------------------------------------------------
 void ByteStream::stripEof()
 {
-    auto eofBuffer = new stream_data_t[mSize-1];
-    memcpy(eofBuffer, mBuffer, mSize-1);
+    auto eofBuffer = new stream_data_t[mSize-sizeof(std::ios::eofbit)];
+    memcpy(eofBuffer, mBuffer, mSize-sizeof(std::ios::eofbit));
     delete[] mBuffer;
     mBuffer = eofBuffer;
-    mSize -= 1;
+    mSize -= sizeof(std::ios::eofbit);
 }
 
 }

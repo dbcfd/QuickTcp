@@ -14,6 +14,16 @@ static stream_size_t stringSize = (stream_size_t)strlen(stringVal);
 static float floatVal[] =  {0.56f, 0.18f, 0.29f, 0.44f, 0.90f};
 static stream_size_t floatSize = 5;
 
+class StringChecker : public BinarySerializer::IStringSizeCheck {
+public:
+    StringChecker() {}
+
+    virtual bool isValidStringSize(stream_size_t size) const final
+    {
+        return (size < 1000);
+    }
+};
+
 class BCOTestObject : public ISerializable
 {
 public:
@@ -368,8 +378,10 @@ TEST_F(SerializableTest, BAD_READ_FROM)
         position += sizeof(double);
 
         BinarySerializer serializer(goodBuffer, goodBufferSize, true);
+        serializer.checkStringSize(std::make_shared<StringChecker>());
         BCOTestObject testObj;
-        EXPECT_FALSE(testObj.readBinary(serializer));
+        EXPECT_TRUE(testObj.readBinary(serializer));
+        EXPECT_NE(goodBufferSize, serializer.bytesRead());
     }
 
     {
@@ -395,8 +407,10 @@ TEST_F(SerializableTest, BAD_READ_FROM)
         position += sizeof(float)*floatSize;
 
         BinarySerializer serializer(goodBuffer, goodBufferSize, true);
+        serializer.checkStringSize(std::make_shared<StringChecker>());
         BCOTestObject testObj;
-        EXPECT_FALSE(testObj.readBinary(serializer));
+        EXPECT_TRUE(testObj.readBinary(serializer));
+        EXPECT_NE(goodBufferSize, serializer.bytesRead());
     }
 }
 
@@ -517,6 +531,7 @@ TEST_F(SerializableTest, BAD_READ_FROM_CHILD)
         }
 
         BinarySerializer serializer(goodBuffer, goodBufferSize, true);
+        serializer.checkStringSize(std::make_shared<StringChecker>());
         BCOParentTestObject testObj;
         EXPECT_FALSE(testObj.readBinary(serializer));
     }
@@ -550,6 +565,7 @@ TEST_F(SerializableTest, BAD_READ_FROM_CHILD)
         }
 
         BinarySerializer serializer(goodBuffer, goodBufferSize, true);
+        serializer.checkStringSize(std::make_shared<StringChecker>());
         BCOParentTestObject testObj;
         EXPECT_FALSE(testObj.readBinary(serializer));
     }
@@ -581,6 +597,7 @@ TEST_F(SerializableTest, BAD_READ_FROM_CHILD)
         }
         
         BinarySerializer serializer(goodBuffer, goodBufferSize, true);
+        serializer.checkStringSize(std::make_shared<StringChecker>());
         BCOParentTestObject testObj;
         EXPECT_FALSE(testObj.readBinary(serializer));
     }
