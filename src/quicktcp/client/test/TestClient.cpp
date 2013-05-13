@@ -1,11 +1,14 @@
 #include "quicktcp/client/Client.h"
+#include "quicktcp/client/IAuthenticator.h"
 #include "quicktcp/client/IProcessor.h"
 #include "quicktcp/client/ServerInfo.h"
+
+#include "quicktcp/server/IResponder.h"
+#include "quicktcp/server/Server.h"
+#include "quicktcp/server/ServerInfo.h"
+
+#include "quicktcp/utilities/BinarySerializer.h"
 #include "quicktcp/utilities/ByteStream.h"
-
-#include <async/AsyncResult.h>
-
-#include <uv.h>
 
 #pragma warning(disable:4251 4275)
 #include <gtest/gtest.h>
@@ -25,152 +28,151 @@ TEST(CLIENT_TEST, SERVER_INFO)
     EXPECT_STREQ("localhost.myplace.local", info.address().c_str());
 }
 
-uv_buf_t ConnectionAllocCallback(uv_handle_t* handle, size_t suggested_size)
-{
-    uv_buf_t ret;
-    ret.base = new char[suggested_size];
-    ret.len = (ULONG)suggested_size;
-    return ret;
-}
+//Mock up responder for server
+class MockResponder : public server::IResponder {
+public:
+    MockResponder() : hadRequest(false)
+    {
+    
+    }
 
-struct WriteRequest
-{
-    uv_write_t req;
-    uv_buf_t buf;
+    virtual bool authenticateConnection() final
+    {
+        return true;
+    }
+
+    virtual std::shared_ptr<utilities::ByteStream> respond(std::shared_ptr<utilities::ByteStream> stream) final
+    {
+        hadRequest = true;
+        return stream;
+    }
+
+    virtual void handleErrorAccepting(const std::string& message) final
+    {
+        
+    }
+
+    virtual void handleErrorSendingResponse(const std::string& message) final
+    {
+        
+    }
+
+    virtual void handleErrorIncompleteSend() final
+    {
+        
+    }
+
+    virtual void handleConnectionClosed() final
+    {
+
+    }
+    bool hadRequest;
 };
 
-void ConnectionWriteCallback(uv_write_t* req, int)
-{
-    auto writeReq = (WriteRequest*)req;
-    delete[] writeReq->buf.base;
-    delete writeReq;
-}
-
-void ConnectionReadCallback(uv_stream_t* stream, ssize_t nread, uv_buf_t buf)
-{
-    auto req = new WriteRequest();
-    req->buf.base = buf.base;
-    req->buf.len = buf.len;
-    uv_write((uv_write_t*)req, stream, &(req->buf), 1, ConnectionWriteCallback);
-}
-
-void ServerConnectionCallback(uv_stream_t* server, int status)
-{
-    if(-1 != status)
-    {
-        auto client = new uv_tcp_t();
-        uv_tcp_init((uv_loop_t*)server->data, client);
-        if(0 == uv_accept(server, (uv_stream_t*)client))
-        {
-            uv_read_start((uv_stream_t*)client, ConnectionAllocCallback, ConnectionReadCallback);
-        }
-        else
-        {
-            uv_close((uv_handle_t*)client, nullptr);
-            delete client;
-        }
-    }
-}
-
-class MockServer
-{
+//mock up a processor
+class MockProcessor : public IProcessor<> {
 public:
-    MockServer(uv_loop_t& _loop, int port) : loop(_loop), buffer(nullptr)
+    MockProcessor() : disconnected(false), errorOccurred(false), processedResponse(false)
     {
-        uv_tcp_init(&loop, &server);
 
-        struct sockaddr_in bind_addr = uv_ip4_addr("127.0.0.1", port);
-        if(-1 == uv_tcp_bind(&server, bind_addr))
-        {
-            throw(std::runtime_error("Error binding to port"));
-        }
-        else
-        {
-            server.data = &loop;
-
-            auto r = uv_listen((uv_stream_t*)&server, 50, &ServerConnectionCallback);
-            if(-1 == r)
-            {
-                throw(std::runtime_error("Error listening for connections"));
-            }
-        }
     }
 
-    ~MockServer()
+    virtual async_cpp::async::AsyncResult<utilities::ByteStream> processResponse(std::shared_ptr<utilities::ByteStream> stream) final
     {
-        delete[] buffer;
+        processedResponse = true;
+        return stream;
     }
 
-    uv_loop_t& loop;
-    uv_tcp_t server;
-    char* buffer;
+    virtual void handleDisconnect() final
+    {
+        disconnected = true;
+    }
+
+    virtual void handleErrorResolveAddress(const std::string& message) final
+    {
+        errorOccurred = true;
+    }
+
+    virtual void handleErrorConnect(const std::string& message) final
+    {
+        errorOccurred = true;
+    }
+
+    bool disconnected;
+    bool processedResponse;
+    bool errorOccurred;
 };
 
-class ClientTest : public testing::Test
-{
+//setup our fixture
+class ClientTest : public testing::Test {
 public:
-
     virtual void SetUp() final
     {
-        port = 4444;
-        loop = uv_default_loop();
-        ASSERT_NO_THROW(server = std::make_shared<MockServer>(*loop, port));
-        thread = std::thread([this]()->void {
-            uv_run(loop, UV_RUN_DEFAULT);
-            std::cout << "loop complete" << std::endl;
+        utilities::BinarySerializer serializer(50);
+        serializer.writeString("This is the request");
+        requestStream = serializer.transferToStream();
+        processor = std::make_shared<MockProcessor>();
+        responder = std::make_shared<MockResponder>();
+        service = std::make_shared<boost::asio::io_service>();
+        testServer = std::unique_ptr<server::Server>(new server::Server(
+            service,
+            server::ServerInfo(4444, 50, 10, 2048),
+            responder
+        ) );
+        serverThread = std::thread([this]()->void {
+            testServer->waitForEvents();
         } );
     }
 
     virtual void TearDown() final
     {
-        uv_stop(loop);
-        thread.join();
+        requestStream.reset();
+        testServer->shutdown();
+        service->stop();
+        serverThread.join();
+        testServer.reset();
     }
 
-    uv_loop_t* loop;
-    std::thread thread;
-    std::shared_ptr<MockServer> server;
-    int port;
+    std::shared_ptr<boost::asio::io_service> service;
+    std::unique_ptr<server::Server> testServer;
+    std::thread serverThread;
+    std::shared_ptr<MockResponder> responder;
+    std::shared_ptr<MockProcessor> processor;
+    std::shared_ptr<utilities::ByteStream> requestStream;
 };
 
-TEST_F(ClientTest, CLIENT_CONNECT)
+TEST_F(ClientTest, CONSTRUCTOR)
 {
-    auto client = std::make_shared<Client>(*loop, ServerInfo("127.0.0.1", port), std::shared_ptr<utilities::ByteStream>());
-
-    ASSERT_NO_THROW(client->connect());
-    EXPECT_NO_THROW(client->waitForConnection());
-    EXPECT_TRUE(client->isConnected());
-
-    std::future<async_cpp::async::AsyncResult> res;
-    EXPECT_NO_THROW(res = client->request(std::shared_ptr<utilities::ByteStream>()));
-
-    EXPECT_NO_THROW(res.get().throwIfError());
-
-    client->disconnect();
-
-    EXPECT_FALSE(client->isConnected());
+    ASSERT_NO_THROW(Client<>(service, client::ServerInfo("127.0.0.1", 4444), processor));
 }
 
-TEST_F(ClientTest, CLIENT_REQUEST)
+TEST_F(ClientTest, CONNECTION)
 {
-    auto client = std::make_shared<Client>(*loop, ServerInfo("127.0.0.1", port), std::shared_ptr<utilities::ByteStream>());
-
+    auto client = std::make_shared<Client<>>(service, client::ServerInfo("127.0.0.1", 4444), processor);
     ASSERT_NO_THROW(client->connect());
-    EXPECT_NO_THROW(client->waitForConnection());
-    EXPECT_TRUE(client->isConnected());
+    client->waitForConnection();
+    ASSERT_TRUE(client->isConnected());
+    ASSERT_NO_THROW(client->disconnect());
+    ASSERT_NO_THROW(client.reset());
+}
 
-    async_cpp::async::AsyncFuture future;
-    std::string message("this is a message");
-    auto stream = std::make_shared<utilities::ByteStream>(&message[0], message.size());
-    EXPECT_NO_THROW(future = client->request(stream));
-    std::shared_ptr<utilities::ByteStream> result;
-    ASSERT_NO_THROW(result = future.get().throwOrAs<utilities::ByteStream>());
-    std::string resultMessage((std::string::value_type*)result->buffer());
-
-    EXPECT_NO_THROW(client->disconnect());
-
-    EXPECT_FALSE(client->isConnected());
-
-    uv_stop(loop);
-    thread.join();
+TEST_F(ClientTest, REQUEST)
+{
+    auto client = std::make_shared<Client<>>(service, client::ServerInfo("127.0.0.1", 4444), processor);
+    ASSERT_NO_THROW(client->connect());
+    client->waitForConnection();
+    ASSERT_TRUE(client->isConnected());
+    std::future<async_cpp::async::AsyncResult<utilities::ByteStream>> future;
+    ASSERT_NO_THROW(future = client->request(requestStream));
+    future.wait();
+    EXPECT_TRUE(responder->hadRequest);
+    EXPECT_TRUE(processor->processedResponse);
+    std::shared_ptr<utilities::ByteStream> responseStream;
+    ASSERT_NO_THROW(responseStream = future.get().throwOrGet());
+    utilities::BinarySerializer serializer(responseStream->buffer(), responseStream->size());
+    std::string result;
+    EXPECT_TRUE(serializer.readString(result));
+    EXPECT_STREQ("This is the request", result.c_str());
+    ASSERT_NO_THROW(client->disconnect());
+    ASSERT_NO_THROW(client.reset());
 }

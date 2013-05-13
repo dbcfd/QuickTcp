@@ -18,11 +18,12 @@ class IAuthenticator;
 template<class T> class IProcessor;
 
 template<class TRESULT = utilities::ByteStream>
-class CLIENT_API Client : public std::enable_shared_from_this<Client<TRESULT>> {
+class Client : public std::enable_shared_from_this<Client<TRESULT>> {
 public:
-    Client(boost::asio::io_service& ioService,
+    Client(std::shared_ptr<boost::asio::io_service>,
         const ServerInfo& info,
         std::shared_ptr<IProcessor<TRESULT>> processor, 
+        const size_t recvBufferSize = 2048,
         std::shared_ptr<IAuthenticator> authenticator = std::shared_ptr<IAuthenticator>());
     virtual ~Client();
 
@@ -36,7 +37,7 @@ public:
 
 protected:
     void authenticate(const boost::system::error_code& ec);
-    void performRequest(std::shared_ptr<PendingRequest<TRESULT>> request) const;
+    void performRequest(std::shared_ptr<PendingRequest<TRESULT>> request);
     void onWriteComplete(std::shared_ptr<PendingRequest<TRESULT>> request, const boost::system::error_code& ec, std::size_t nbBytes);
     void onReceiveComplete(std::shared_ptr<PendingRequest<TRESULT>> request, const boost::system::error_code& ec, std::size_t nbBytes);
 
@@ -47,19 +48,22 @@ protected:
     std::shared_ptr<IProcessor<TRESULT>> mProcessor;
     ServerInfo mInfo;
     std::shared_ptr<boost::asio::ip::tcp::socket> mSocket;
-    boost::asio::io_service& mService;
+    std::shared_ptr<boost::asio::io_service> mService;
     bool mIsConnected;
     std::condition_variable mConnectedSignal;
+    size_t mReceiveBufferSize;
 };
 
 //inline implementations
 //------------------------------------------------------------------------------
 template<class TRESULT>
-Client<TRESULT>::Client(boost::asio::io_service& ioService,
+Client<TRESULT>::Client(std::shared_ptr<boost::asio::io_service> ioService,
     const ServerInfo& info,
     std::shared_ptr<IProcessor<TRESULT>> processor,
+    const size_t recvBufferSize,
     std::shared_ptr<IAuthenticator> authenticator)
-    : mInfo(info), mIsConnected(false), mService(ioService), mAuthenticator(authenticator), mProcessor(processor)
+    : mInfo(info), mIsConnected(false), mService(ioService), mAuthenticator(authenticator), 
+    mProcessor(processor), mReceiveBufferSize(recvBufferSize)
 {
     assert(processor);
 }
@@ -76,17 +80,17 @@ template<class TRESULT>
 void Client<TRESULT>::connect()
 {
     auto thisPtr = shared_from_this();
-    mInfo.resolveAddress(mService, [thisPtr, this](const boost::system::error_code& ec, boost::asio::ip::tcp::resolver::iterator iter) -> void {
+    mInfo.resolveAddress(*mService, [thisPtr, this](const boost::system::error_code& ec, boost::asio::ip::tcp::resolver::iterator iter) -> void {
         if(!ec)
         {
-            mSocket = std::make_shared<boost::asio::ip::tcp::socket>(mService);
+            mSocket = std::make_shared<boost::asio::ip::tcp::socket>(*mService);
             mSocket->async_connect(*iter, std::bind(&Client::authenticate, this, std::placeholders::_1));
         }
         else
         {
             mProcessor->handleErrorResolveAddress(ec.message());
         }   
-    } )
+    } );
 }
 
 //------------------------------------------------------------------------------
@@ -117,7 +121,11 @@ template<class TRESULT>
 void Client<TRESULT>::disconnect()
 {
     mIsConnected = false;
-    mSocket->close();
+    if(mSocket)
+    {
+        mSocket->close();
+    }
+    mSocket.reset();
 
 }
 
@@ -136,10 +144,10 @@ void Client<TRESULT>::waitForConnection()
 template<class TRESULT>
 std::future<async_cpp::async::AsyncResult<TRESULT>> Client<TRESULT>::request(std::shared_ptr<utilities::ByteStream> stream)
 {
-    std::future<async_result_t> result;
+    std::future<async_cpp::async::AsyncResult<TRESULT>> result;
     if(mIsConnected)
     {
-        auto req = std::make_shared<PendingRequest>(stream);
+        auto req = std::make_shared<PendingRequest<TRESULT>>(stream, mReceiveBufferSize);
         result = req->getFuture();
         std::lock_guard<std::mutex> lock(mRequestsMutex);
         if(mPendingRequests.empty())
@@ -150,14 +158,14 @@ std::future<async_cpp::async::AsyncResult<TRESULT>> Client<TRESULT>::request(std
     }
     else
     {
-        result = async_result_t("Client: Client is disconnected").asFulfilledFuture();
+        result = async_cpp::async::AsyncResult<TRESULT>("Client: Client is disconnected").asFulfilledFuture();
     }
     return result;
 }
 
 //------------------------------------------------------------------------------
 template<class TRESULT>
-void Client<TRESULT>::performRequest(std::shared_ptr<PendingRequest<TRESULT>> request) const
+void Client<TRESULT>::performRequest(std::shared_ptr<PendingRequest<TRESULT>> req)
 {
     auto thisPtr = shared_from_this();
     mSocket->async_send(req->sendBuffers(), [req, thisPtr, this](const boost::system::error_code& ec, std::size_t nbBytes) -> void {
@@ -172,7 +180,7 @@ void Client<TRESULT>::onWriteComplete(std::shared_ptr<PendingRequest<TRESULT>> r
     //begin read
     if(!ec)
     {
-        if(request->wasSendValid)
+        if(request->wasSendValid(nbBytes))
         {
             auto thisPtr = shared_from_this();
             mSocket->async_receive(request->recvBuffers(), [request, thisPtr, this](const boost::system::error_code& ec, std::size_t nbBytes)
@@ -201,10 +209,10 @@ void Client<TRESULT>::onReceiveComplete(std::shared_ptr<PendingRequest<TRESULT>>
     {
         request->appendData(nbBytes);
         auto thisPtr = shared_from_this();
-        mService.post([thisPtr, this, request]()->void {
+        mService->post([thisPtr, this, request]()->void {
             request->complete(mProcessor);
         } );
-        std::shared_ptr<PendingRequest> nextRequest;
+        std::shared_ptr<PendingRequest<TRESULT>> nextRequest;
         {
             std::lock_guard<std::mutex> lock(mRequestsMutex);
             mPendingRequests.pop();

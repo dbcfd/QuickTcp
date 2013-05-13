@@ -14,7 +14,7 @@ class ByteStream;
 namespace client {
 
 template<class T = utilities::ByteStream>
-class CLIENT_API IProcessor {
+class IProcessor {
 public:
     virtual ~IProcessor() {}
     /**
@@ -25,7 +25,6 @@ public:
     virtual void handleDisconnect() = 0;
     virtual void handleErrorResolveAddress(const std::string& message) = 0;
     virtual void handleErrorConnect(const std::string& message) = 0;
-    virtual void handleErrorReceive(const std::string& message) = 0;
 };
 
 //inline implementations

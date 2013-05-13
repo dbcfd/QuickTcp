@@ -29,10 +29,10 @@ public:
     void fail(const std::string& message);
 
 private:
-    std::packaged_task<async_cpp::async::AsyncResult<T>(std::shared_ptr<IProcessor<T>>, std::shared_ptr<utilities::ByteStream>, std::string*)> mTask;
+    std::packaged_task<async_cpp::async::AsyncResult<T>(std::shared_ptr<IProcessor<T>>, std::shared_ptr<utilities::ByteStream>, std::string const*)> mTask;
     std::shared_ptr<utilities::ByteStream> mSentStream;
-    std::shared_ptr<utilities::ByteStream> mRecievedStream;
-    std::unique_ptr<char> mRecvBuffer;
+    std::shared_ptr<utilities::ByteStream> mReceivedStream;
+    std::unique_ptr<char[]> mRecvBuffer;
     std::vector<boost::asio::const_buffer> mSendBuffers;
     std::vector<boost::asio::mutable_buffer> mRecvBuffers;
 };
@@ -41,29 +41,27 @@ private:
 template<class T>
 PendingRequest<T>::PendingRequest(std::shared_ptr<utilities::ByteStream> stream, size_t recvBufferSize) : mSentStream(stream)
 {
-    mTask = std::packaged_task<async_cpp::async::AsyncResult<T>(std::shared_ptr<IProcessor<T>>, std::shared_ptr<utilities::ByteStream>, std::string*)>(
-        [](std::shared_ptr<IProcessor<T>> processor, std::shared_ptr<utilities::ByteStream> serverStream, std::string* failString) -> async_cpp::async::AsyncResult<T> 
+    mTask = std::packaged_task<async_cpp::async::AsyncResult<T>(std::shared_ptr<IProcessor<T>>, std::shared_ptr<utilities::ByteStream>, std::string const*)>(
+        [](std::shared_ptr<IProcessor<T>> processor, std::shared_ptr<utilities::ByteStream> serverStream, std::string const* failString) -> async_cpp::async::AsyncResult<T> 
     {
-        result_t res;
+        async_cpp::async::AsyncResult<T> res;
         if(nullptr == failString) 
         {
             if(serverStream->hasEof())
             {
                 serverStream->stripEof();
             }
-            res = result_t(processor->process(serverStream));
+            res = async_cpp::async::AsyncResult<T>(processor->processResponse(serverStream));
         }
         else
         {
-            res = result_t(failString);
+            res = async_cpp::async::AsyncResult<T>(*failString);
         }
         return res;
     } 
     );
 
-    mRecvBuffer = std::unique_ptr<char, std::function<void(char*)>>(new char[recvBufferSize], [](char* value)->void {
-        delete[] value;
-    } );
+    mRecvBuffer = std::unique_ptr<char[]>(new char[recvBufferSize]);
 
     mSendBuffers.emplace_back(stream->buffer(), stream->size());
     mRecvBuffers.emplace_back(mRecvBuffer.get(), recvBufferSize);
@@ -101,14 +99,14 @@ std::future<async_cpp::async::AsyncResult<T>> PendingRequest<T>::getFuture()
 template<class T>
 void PendingRequest<T>::appendData(const std::size_t nbBytes)
 {
-    auto stream = std::make_shared<utilities::ByteStream>(mRecvBuffer.get(), nbBytes);
-    if(mRecievedStream)
+    auto stream = std::make_shared<utilities::ByteStream>(mRecvBuffer.get(), (stream_size_t)nbBytes);
+    if(mReceivedStream)
     {
-        mRecievedStream = mRecevedStream->append(stream);
+        mReceivedStream = mReceivedStream->append(stream);
     }
     else
     {
-        mRecievedStream = stream;
+        mReceivedStream = stream;
     }
 }
 
