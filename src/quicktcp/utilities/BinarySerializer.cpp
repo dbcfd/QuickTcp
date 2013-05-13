@@ -110,7 +110,10 @@ std::shared_ptr<utilities::ByteStream> BinarySerializer::toStream() const
 //------------------------------------------------------------------------------
 std::shared_ptr<utilities::ByteStream> BinarySerializer::transferToStream()
 {
-    return std::make_shared<utilities::ByteStream>(mBuffer, mSize, true);
+    auto ret = std::make_shared<utilities::ByteStream>(mBuffer, mSize, true);
+    mBuffer = nullptr;
+    mSize = 0;
+    return ret;
 }
 
 }

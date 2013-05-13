@@ -4,6 +4,7 @@
 #pragma warning(disable:4251 4275)
 #include <gtest/gtest.h>
 
+using namespace quicktcp;
 using namespace quicktcp::utilities;
 
 static int intVal = 2;
