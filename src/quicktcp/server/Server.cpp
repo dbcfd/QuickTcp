@@ -36,29 +36,75 @@ void startRead()
 {
     auto thisPtr = shared_from_this();
     mReceiveBuffers.emplace_back(mBuffer, mBufferSize);
-    mSocket.async_receive(mReceiveBuffers, [thisPtr](const boost::system::error_code& ec, std::size_t nbBytes)->void {
-        thisPtr->onReadComplete(ec, nbBytes);
-    } );
+    boost::asio::async_read(mSocket, mReceiveBuffers, boost::asio::transfer_at_least(1), 
+        [thisPtr, this](const boost::system::error_code& ec, std::size_t nbBytes)->void 
+        {
+            onReadComplete(ec, nbBytes);
+        } 
+    );
+}
+
+//------------------------------------------------------------------------------
+void transferBuffer(std::size_t nbBytes)
+{
+    auto transferred = std::make_shared<utilities::ByteStream>(mBuffer, (stream_size_t)nbBytes, true);
+    mBuffer = new char[mBufferSize];
+    if(mStream)
+    {
+        mStream = mStream->append(transferred);
+    }
+    else
+    {
+        mStream = transferred;
+    }
 }
 
 //------------------------------------------------------------------------------
 void onReadComplete(const boost::system::error_code& ec, std::size_t nbBytes)
 {
-    if(!ec)
+    //if we didn't have an error, or the error was eof, than the read was okay
+    if(!ec || boost::asio::error::eof == ec.value())
     {
-        mReceiveBuffers.clear();
-        auto thisPtr = shared_from_this();
-        auto data = std::make_shared<utilities::ByteStream>(mBuffer, (stream_size_t)nbBytes);
-        mService->post([thisPtr, data, this]()->void {
-            auto response = mResponder->respond(data);
-            if(!response->hasEof()) response->appendEof();
-            mSendBuffers.emplace_back(response->buffer(), response->size());
-            mSocket.async_send(mSendBuffers, [thisPtr, this, response](const boost::system::error_code& ec, std::size_t nbBytes)->void {
-                onWriteComplete(response, ec, nbBytes);
-            } );
-        } );
+        //transfer bytes if some were received
+        if(nbBytes > 0)
+        {
+            transferBuffer(nbBytes);
+        }
+        if(mStream)
+        {
+            if(mStream->hasEof() || boost::asio::error::eof == ec.value())
+            {
+                //done receiving
+                mReceiveBuffers.clear();
+
+                auto thisPtr = shared_from_this();
+                auto request = mStream;
+                mStream.reset();
+                mService->post([thisPtr, request, this]()->void {
+                    auto response = mResponder->respond(request);
+                    if(!response->hasEof()) response->appendEof();
+                    mSendBuffers.emplace_back(response->buffer(), response->size());
+                    mSocket.async_send(mSendBuffers, [thisPtr, this, response](const boost::system::error_code& ec, std::size_t nbBytes)->void {
+                        onWriteComplete(response, ec, nbBytes);
+                    } );
+                } );
+            }
+            else
+            {
+                //more to read
+                mReceiveBuffers.clear();
+                mReceiveBuffers.emplace_back(mBuffer, mBufferSize);
+                auto thisPtr = shared_from_this();
+                boost::asio::async_read(mSocket, mReceiveBuffers, boost::asio::transfer_at_least(1), 
+                    [thisPtr, this](const boost::system::error_code& ec, std::size_t nbBytes)->void 
+                    {
+                        onReadComplete(ec, nbBytes);
+                    } 
+                );
+            }
+        }
     }
-    //else connection will close
+    //else connection will close due to shared_ptr clean up 
 }
 
 //------------------------------------------------------------------------------
@@ -86,6 +132,7 @@ tcp::socket& getSocket()
 private:
     std::shared_ptr<boost::asio::io_service> mService;
     std::shared_ptr<IResponder> mResponder;
+    std::shared_ptr<utilities::ByteStream> mStream;
     tcp::socket mSocket;
     std::vector<boost::asio::mutable_buffer> mReceiveBuffers;
     std::vector<boost::asio::const_buffer> mSendBuffers;

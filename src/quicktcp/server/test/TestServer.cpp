@@ -87,15 +87,26 @@ TEST(SERVER_TEST, WAIT_AND_SHUTDOWN)
 
 class MockClient {
 public:
-    MockClient(boost::asio::io_service& _service)
+    MockClient(boost::asio::io_service& _service, std::shared_ptr<utilities::ByteStream> toSend = std::shared_ptr<utilities::ByteStream>())
         : socket(_service), service(_service), receivedResponse(false), sendSuccessful(false)
     {
         socket.connect(tcp::endpoint(boost::asio::ip::address::from_string("127.0.0.1"), PORT));
-        utilities::BinarySerializer serializer(100);
-        serializer.writeString(SENT);
-        serializer.writeEof();
-        auto streamSize = serializer.size();
-        sent = std::make_shared<utilities::ByteStream>(serializer.transferBuffer(), streamSize);
+        if(!toSend)
+        {
+            utilities::BinarySerializer serializer(100);
+            serializer.writeString(SENT);
+            serializer.writeEof();
+            auto streamSize = serializer.size();
+            sent = std::make_shared<utilities::ByteStream>(serializer.transferBuffer(), streamSize);
+        }
+        else
+        {
+            sent = toSend;
+        }
+        if(!sent->hasEof())
+        {
+            sent->appendEof();
+        }
     }
 
     void send()
@@ -209,4 +220,31 @@ TEST_F(ServerTest, CONNECTION_REQUEST_RECEIVE)
     ASSERT_TRUE(serializer.readString(responseFromServer));
 
     ASSERT_STREQ(SENT, responseFromServer.c_str());
+}
+
+TEST_F(ServerTest, CONNECTION_LARGE_REQUEST)
+{
+    float data[3000];
+    memset(data, 0, sizeof(data));
+    utilities::BinarySerializer dataSerializer(sizeof(data));
+    dataSerializer.writeT<float>(data[0], sizeof(float), sizeof(data) / sizeof(float));
+    MockClient client(*service, dataSerializer.transferToStream());
+
+    //give our server time to work through acceptance and pass to responder
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+    ASSERT_TRUE(responder->hadConnection);
+
+    client.send();
+
+    ASSERT_TRUE(client.sendSuccessful);
+
+    //give our server time to work through request and pass to responder
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+
+    ASSERT_TRUE(responder->hadRequest);
+
+    client.receive();
+
+    ASSERT_TRUE(client.receivedResponse);
 }
