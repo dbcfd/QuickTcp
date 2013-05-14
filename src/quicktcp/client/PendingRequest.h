@@ -25,6 +25,8 @@ public:
     std::future<async_cpp::async::AsyncResult<T>> getFuture();
 
     void appendData(const std::size_t nbBytes);
+    bool receivedEof() const;
+    bool hasReceivedData() const;
     void complete(std::shared_ptr<IProcessor<T>> processor);
     void fail(const std::string& message);
 
@@ -35,11 +37,12 @@ private:
     std::unique_ptr<char[]> mRecvBuffer;
     std::vector<boost::asio::const_buffer> mSendBuffers;
     std::vector<boost::asio::mutable_buffer> mRecvBuffers;
+    size_t mRecvBufferSize;
 };
 //inline implementations
 //------------------------------------------------------------------------------
 template<class T>
-PendingRequest<T>::PendingRequest(std::shared_ptr<utilities::ByteStream> stream, size_t recvBufferSize) : mSentStream(stream)
+PendingRequest<T>::PendingRequest(std::shared_ptr<utilities::ByteStream> stream, size_t recvBufferSize) : mSentStream(stream), mRecvBufferSize(recvBufferSize)
 {
     mTask = std::packaged_task<async_cpp::async::AsyncResult<T>(std::shared_ptr<IProcessor<T>>, std::shared_ptr<utilities::ByteStream>, std::string const*)>(
         [](std::shared_ptr<IProcessor<T>> processor, std::shared_ptr<utilities::ByteStream> serverStream, std::string const* failString) -> async_cpp::async::AsyncResult<T> 
@@ -99,7 +102,10 @@ std::future<async_cpp::async::AsyncResult<T>> PendingRequest<T>::getFuture()
 template<class T>
 void PendingRequest<T>::appendData(const std::size_t nbBytes)
 {
-    auto stream = std::make_shared<utilities::ByteStream>(mRecvBuffer.get(), (stream_size_t)nbBytes);
+    auto stream = std::make_shared<utilities::ByteStream>(mRecvBuffer.release(), (stream_size_t)nbBytes, true);
+    mRecvBuffer = std::unique_ptr<char[]>(new char[mRecvBufferSize]);
+    mRecvBuffers.clear();
+    mRecvBuffers.emplace_back(mRecvBuffer.get(), mRecvBufferSize);
     if(mReceivedStream)
     {
         mReceivedStream = mReceivedStream->append(stream);
@@ -124,6 +130,21 @@ void PendingRequest<T>::fail(const std::string& message)
 {
     assert(!message.empty());
     mTask(nullptr, nullptr, &message);
+}
+
+//------------------------------------------------------------------------------
+template<class T>
+bool PendingRequest<T>::receivedEof() const
+{
+    assert(mReceivedStream);
+    return mReceivedStream->hasEof();
+}
+
+//------------------------------------------------------------------------------
+template<class T>
+bool PendingRequest<T>::hasReceivedData() const
+{
+    return (nullptr != mReceivedStream);
 }
 
 }

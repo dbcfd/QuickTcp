@@ -147,6 +147,10 @@ std::future<async_cpp::async::AsyncResult<TRESULT>> Client<TRESULT>::request(std
     std::future<async_cpp::async::AsyncResult<TRESULT>> result;
     if(mIsConnected)
     {
+        if(!stream->hasEof())
+        {
+            stream->appendEof();
+        }
         auto req = std::make_shared<PendingRequest<TRESULT>>(stream, mReceiveBufferSize);
         result = req->getFuture();
         std::lock_guard<std::mutex> lock(mRequestsMutex);
@@ -183,7 +187,7 @@ void Client<TRESULT>::onWriteComplete(std::shared_ptr<PendingRequest<TRESULT>> r
         if(request->wasSendValid(nbBytes))
         {
             auto thisPtr = shared_from_this();
-            mSocket->async_receive(request->recvBuffers(), [request, thisPtr, this](const boost::system::error_code& ec, std::size_t nbBytes)
+            boost::asio::async_read(*mSocket, request->recvBuffers(), boost::asio::transfer_at_least(1), [request, thisPtr, this](const boost::system::error_code& ec, std::size_t nbBytes)
             {
                 onReceiveComplete(request, ec, nbBytes);
             } );
@@ -205,32 +209,55 @@ void Client<TRESULT>::onWriteComplete(std::shared_ptr<PendingRequest<TRESULT>> r
 template<class TRESULT>
 void Client<TRESULT>::onReceiveComplete(std::shared_ptr<PendingRequest<TRESULT>> request, const boost::system::error_code& ec, std::size_t nbBytes)
 {
-    if(!ec)
+    if(!ec || boost::asio::error::eof == ec.value())
     {
-        request->appendData(nbBytes);
-        auto thisPtr = shared_from_this();
-        mService->post([thisPtr, this, request]()->void {
-            request->complete(mProcessor);
-        } );
-        std::shared_ptr<PendingRequest<TRESULT>> nextRequest;
+        if(nbBytes > 0)
         {
-            std::lock_guard<std::mutex> lock(mRequestsMutex);
-            mPendingRequests.pop();
-            if(!mPendingRequests.empty())
+            request->appendData(nbBytes);
+        }
+
+        if(request->hasReceivedData())
+        {
+            auto thisPtr = shared_from_this();
+            if(request->receivedEof() || boost::asio::error::eof == ec.value())
             {
-                nextRequest = mPendingRequests.front();
+                //request complete
+                mService->post([thisPtr, this, request]()->void {
+                    request->complete(mProcessor);
+                } );
+                std::shared_ptr<PendingRequest<TRESULT>> nextRequest;
+                {
+                    std::lock_guard<std::mutex> lock(mRequestsMutex);
+                    mPendingRequests.pop();
+                    if(!mPendingRequests.empty())
+                    {
+                        nextRequest = mPendingRequests.front();
+                    }
+                }
+                if(nextRequest)
+                {
+                    performRequest(nextRequest);
+                }
+            }
+            else
+            {
+                //read more
+                boost::asio::async_read(*mSocket, request->recvBuffers(), boost::asio::transfer_at_least(1), [request, thisPtr, this](const boost::system::error_code& ec, std::size_t nbBytes)
+                {
+                    onReceiveComplete(request, ec, nbBytes);
+                } );
             }
         }
-        if(nextRequest)
+        else
         {
-            performRequest(nextRequest);
+            request->fail("Client: Received no data, disconnected from server");
+            disconnect();
         }
     }
     else
     {
-        //check if partial send
-
-        //else disconnect
+        request->fail(ec.message());
+        disconnect();
     }
 }
 
